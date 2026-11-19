@@ -2,7 +2,7 @@
 
 A coach-first workspace for gym coaching, with an AI agent that works for the coach. Coaches follow their clients' nutrition and training in one place and get a weekly review of each client drafted by an AI workflow, which they approve, edit or reject before the client reads it. Clients (gymers) log their food, weight and workouts and choose what their coach sees. A research chat answers questions about nutrition and resistance training principles from open-licensed sports science articles, with citations, and calls tools for personal calculations and food lookups.
 
-**Status:** built for two course briefs of the Turing College AI Engineering course. Sprint 2 ([`docs/BRIEF.md`](docs/BRIEF.md)) built the research chat (advanced RAG and tool calling); Sprint 3 ([`docs/BRIEF_SPRINT3.md`](docs/BRIEF_SPRINT3.md), deadline 2026-11-23) turned it into the agent and the coach-first workspace this README describes. Every ticket and its status are in [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md); what each change did and why is in [`docs/PROGRESS.md`](docs/PROGRESS.md).
+**Status:** built for the course briefs of the Turing College AI Engineering course. Sprint 2 ([`docs/BRIEF.md`](docs/BRIEF.md)) built the research chat (advanced RAG and tool calling); Sprint 3 ([`docs/BRIEF_SPRINT3.md`](docs/BRIEF_SPRINT3.md), deadline 2026-11-23) turned it into the agent and the coach-first workspace this README describes. The Capstone ([`docs/BRIEF_CAPSTONE.md`](docs/BRIEF_CAPSTONE.md), deadline 2026-12-16) continues it in this repository as FitKompass: real-time coach-client messages and an agent that turns them into drafts a person approves (planned in [`docs/PRD.md`](docs/PRD.md), "Capstone: FitKompass"; in development). Every ticket and its status are in [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md); what each change did and why is in [`docs/PROGRESS.md`](docs/PROGRESS.md).
 
 ![A coach asks the chat how much protein a day helps build muscle; the answer appears with numbered citations, and the list of cited research articles opens below it](docs/media/chat.gif)
 
@@ -202,6 +202,7 @@ These are not needed to run the app:
 
 | Document | Contents |
 |---|---|
+| [`docs/BRIEF_CAPSTONE.md`](docs/BRIEF_CAPSTONE.md) | Summary of the Capstone course brief and the case chosen |
 | [`docs/BRIEF.md`](docs/BRIEF.md) | Summary of the Sprint 2 course brief |
 | [`docs/BRIEF_SPRINT3.md`](docs/BRIEF_SPRINT3.md) | Summary of the Sprint 3 course brief and of the review of Sprint 2 |
 | [`docs/PRD.md`](docs/PRD.md) | What we build: features, guardrails, acceptance criteria |

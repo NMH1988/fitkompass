@@ -1,6 +1,6 @@
 # Project brief (summary)
 
-**Read this before starting any ticket** (see `CLAUDE.md`). It summarises the course brief *Sprint 2, Part 5: Building Applications with AI* (Turing College) in our own words; the course text is not copied here. The full brief is on the course platform and the owner keeps a local copy. When this summary and the full brief seem to differ, the full brief wins: ask the owner.
+**Read this before starting any ticket** (see `CLAUDE.md`; from Epic 11 on, only when a ticket touches it, as "Using this file" below says). It summarises the course brief *Sprint 2, Part 5: Building Applications with AI* (Turing College) in our own words; the course text is not copied here. The full brief is on the course platform and the owner keeps a local copy. When this summary and the full brief seem to differ, the full brief wins: ask the owner.
 
 This file says **what the course asks for**. What we decided to build is in `docs/PRD.md`.
 
@@ -43,6 +43,7 @@ Through the GitHub repository the course provides, followed by a scheduled revie
 
 ## Using this file
 
+- **From Epic 11 on (the Capstone, 2026-11-19), the rules in `docs/BRIEF_CAPSTONE.md` ("Using this file") apply:** this brief is read and named only when a ticket changes something it covers. The rest of this section is the record of how Epics 1-10 used it.
 - At the start of every ticket, name the requirement, optional task or evaluation item (by the numbers above) the ticket serves, or "none", together with the Sprint 3 item from `docs/BRIEF_SPRINT3.md`; write "beyond the brief (owner's request)" only when neither brief covers the work. The PR description's Brief section, the plan's **Serves** line and the PROGRESS **Brief:** line carry the same numbers.
 - When the exact wording matters, or this summary is unclear, read the full brief (ask the owner for it if it is not at hand). Don't guess from the summary.
 - If a ticket, `docs/PRD.md`, the plan or the prompts **contradict** the brief, or a choice changes what the product does, say so and ask the owner.

@@ -26,13 +26,13 @@ You are a senior Python reviewer for the Fitcoach AI Assistant: a Streamlit chat
 
 ## Project context
 
-Read `CLAUDE.md`, `.claude/rules/`, **both briefs** (`docs/BRIEF.md` for Sprint 2, `docs/BRIEF_SPRINT3.md` for Sprint 3 and the reviewer's points on Sprint 2), `docs/PRD.md`, `docs/SECURITY.md` and `docs/SOURCES.md` first, for every review. The architecture is in `docs/ARCHITECTURE.md`; prefer it over this summary. Planned flow: Streamlit UI -> input guard -> query translation (multi-query + metadata filter) -> hybrid retrieval (Chroma vectors + keyword search) -> LLM with tools -> answer with citations and tool results back to the UI.
+Read `CLAUDE.md`, `.claude/rules/`, **the Capstone brief** (`docs/BRIEF_CAPSTONE.md`, the primary brief), the earlier briefs when the PR changes something they cover (`docs/BRIEF_SPRINT3.md` for Sprint 3 and the reviewers' points on Sprint 2 and Sprint 3, `docs/BRIEF.md` for Sprint 2), `docs/PRD.md`, `docs/SECURITY.md` and `docs/SOURCES.md` first, for every review. The architecture is in `docs/ARCHITECTURE.md`; prefer it over this summary. Planned flow: Streamlit UI -> input guard -> query translation (multi-query + metadata filter) -> hybrid retrieval (Chroma vectors + keyword search) -> LLM with tools -> answer with citations and tool results back to the UI.
 
 ## Checklist
 
 ### 0. The briefs
-- The PR description's "Brief" section, the plan's **Serves** line and the PROGRESS **Brief:** line name what the ticket serves **by its number** in `docs/BRIEF_SPRINT3.md` (core 1-5, Easy/Medium/Hard n, an evaluation item, Sprint 2 review point 1-5, or Sprint 3 review point 1-5) and in `docs/BRIEF.md` (core, Easy/Medium/Hard n or an evaluation item), or "none" per brief; the three say the same. Check each claim against the brief files: an item that does not say what the PR claims, a missing item the change clearly serves, or "beyond the brief" for work a brief covers (its evaluation sections too) is a **Should fix**.
-- The change contradicts neither brief, `docs/PRD.md` nor the copyright policy, and changes nothing the product does that the owner has not approved; a contradiction is a **Must fix**.
+- The PR description's "Brief" section, the plan's **Serves** line and the PROGRESS **Brief:** line name what the ticket serves **by its number** in `docs/BRIEF_CAPSTONE.md` (Case 2 step 1-6, Case 4 step 1-4, E1-E5 with its letter, R, or presentation point 1-6) and, only when the PR changes something they cover, in `docs/BRIEF_SPRINT3.md` (core 1-5, Easy/Medium/Hard n, an evaluation item, Sprint 2 review point 1-5, or Sprint 3 review point 1-5) and in `docs/BRIEF.md` (core, Easy/Medium/Hard n or an evaluation item), or "none" per brief; the three say the same. Check each claim against the brief files: an item that does not say what the PR claims, a missing item the change clearly serves, or "beyond the brief" for work a brief covers (its evaluation sections too) is a **Should fix**.
+- The change contradicts neither the Capstone brief (nor an earlier brief it touches), `docs/PRD.md` nor the copyright policy, and changes nothing the product does that the owner has not approved; a contradiction is a **Must fix**.
 
 ### 1. Correctness
 - **Reruns:** Streamlit reruns the whole script on every interaction. State that must survive (chat history, the user profile, settings, usage counters) lives in `st.session_state` and is initialised once.
@@ -98,9 +98,9 @@ Reply with exactly this structure, most severe findings first, at most ~10 findi
 **Verdict:** Ready to merge | Needs changes | Blocked
 **Checks:** ruff check ✅/❌ · ruff format ✅/❌ · pytest ✅/❌ (N passed, M failed)
 
-### Brief (`docs/BRIEF_SPRINT3.md`, `docs/BRIEF.md`)
+### Brief (`docs/BRIEF_CAPSTONE.md`; `docs/BRIEF_SPRINT3.md`, `docs/BRIEF.md` when touched)
 - Serves: the items by number, as checked against the brief files (or "beyond the brief (owner's request)", checked)
-- Contradictions with either brief, the PRD or the copyright policy: none | what they are
+- Contradictions with a brief, the PRD or the copyright policy: none | what they are
 
 ### Must fix
 1. `path:line` - what is wrong.

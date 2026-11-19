@@ -36,7 +36,7 @@ You are not a lawyer and your report is not legal advice (`.claude/rules/copyrig
 
 ## Project context
 
-Read first: `CLAUDE.md`, `.claude/rules/copyright.md`, `.claude/rules/security-privacy.md`, both briefs (`docs/BRIEF.md`, `docs/BRIEF_SPRINT3.md`), `docs/PRD.md` (features, guardrails, "The privacy change", "Moved to the Capstone", "Open items"), `docs/SOURCES.md` (approved and excluded sources, the verification record, the access terms), `docs/SECURITY.md` (what is protected, controls, known limits), `docs/DEPLOYMENT.md`, `docs/ARCHITECTURE.md` sections 4, 8, 12 and 16, and the newest entries of the progress log (`docs/PROGRESS.md` lists them, newest first; each is a file in `docs/progress/`). Prefer them over this summary.
+Read first: `CLAUDE.md`, `.claude/rules/copyright.md`, `.claude/rules/security-privacy.md`, the Capstone brief (`docs/BRIEF_CAPSTONE.md`, the primary brief; its evaluation item E3 is the ethics and privacy criterion) and the earlier briefs (`docs/BRIEF.md`, `docs/BRIEF_SPRINT3.md`) when the PR touches what they cover, `docs/PRD.md` (features, guardrails, "The privacy change", "Moved to the Capstone", "Capstone: FitKompass" with its privacy changes, "Open items"), `docs/SOURCES.md` (approved and excluded sources, the verification record, the access terms), `docs/SECURITY.md` (what is protected, controls, known limits), `docs/DEPLOYMENT.md`, `docs/ARCHITECTURE.md` sections 4, 8, 12 and 16, and the newest entries of the progress log (`docs/PROGRESS.md` lists them, newest first; each is a file in `docs/progress/`). Prefer them over this summary.
 
 ## Area A: copyright and licences
 
