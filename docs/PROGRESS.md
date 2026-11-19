@@ -8,7 +8,7 @@ What each PR did and why, newest first. This file is the index: one line per ent
 
 Keep the entry short and record what the code does not say. `tests/test_docs_layout.py` checks that every entry file has its line here, with the same text as its heading, and every line its file. Parallel PRs all add a line at the top, so they conflict here: keep both lines. `.gitattributes` sets `merge=union` for this file, which handles local merges; GitHub's web conflict editor ignores it. The entries written before T1.15 with no ticket ID in their heading (plans and the setup of 2026-10-19) have files named `<date>-plan-...` and `<date>-setup-...`.
 
-**Numbers with `#`:** `#<PR>` and `closes #<issue>` refer to the personal repository where the work started, https://github.com/NMH1988/nutrition-ai-assistant (PR `#76` is https://github.com/NMH1988/nutrition-ai-assistant/pull/76); since 2026-10-26 the work continues in https://github.com/NMH1988/fitcoach-ai-assistant, whose issues and PRs are mostly written with the repository name (`NMH1988/fitcoach-ai-assistant#<n>`); in an entry whose heading names that repository, a bare PR or issue number may be one of its numbers (e.g. "PR #37" in T1.10's entry); issue and PR numbers in the course repository, if it has any, are unrelated. A source number (e.g. "#18a") is a row in `docs/SOURCES.md`.
+**Numbers with `#`:** `#<PR>` and `closes #<issue>` refer to the personal repository where the work started, https://github.com/NMH1988/nutrition-ai-assistant (PR `#76` is https://github.com/NMH1988/nutrition-ai-assistant/pull/76); since 2026-10-26 the work continues in https://github.com/NMH1988/fitcoach-ai-assistant, whose issues and PRs are mostly written with the repository name (`NMH1988/fitcoach-ai-assistant#<n>`); in an entry whose heading names that repository, a bare PR or issue number may be one of its numbers (e.g. "PR #37" in T1.10's entry); issue and PR numbers in the course repository, if it has any, are unrelated. Since 2026-11-19 (T11.1, the Capstone) the work continues in https://github.com/NMH1988/fitkompass, whose issues and PRs are always written with the repository name (`NMH1988/fitkompass#<n>`). A source number (e.g. "#18a") is a row in `docs/SOURCES.md`.
 
 ```
 ## YYYY-MM-DD · T<x.y> <title> · #<PR> (closes #<issue>)
@@ -21,6 +21,7 @@ Keep the entry short and record what the code does not say. `tests/test_docs_lay
 
 ---
 
+- [2026-11-19 · T11.1 Capstone plan: the brief, the PRD section, decisions D24-D29 and Epic 11 · NMH1988/fitkompass#7 (closes NMH1988/fitkompass#6)](progress/2026-11-19-T11.1.md)
 - [2026-11-19 · T10.9 Comments say why the code is as it is; the history stays in `docs/progress/` · NMH1988/fitcoach-ai-assistant#155 (closes NMH1988/fitcoach-ai-assistant#141)](progress/2026-11-19-T10.9.md)
 - [2026-11-19 · Plan T10.10: split `chat` into a package by concern · NMH1988/fitcoach-ai-assistant#154 (closes NMH1988/fitcoach-ai-assistant#153)](progress/2026-11-19-plan-T10.10.md)
 - [2026-11-19 · T10.8 Split `config` and `i18n` into packages by concern, same behaviour · NMH1988/fitcoach-ai-assistant#151 (closes NMH1988/fitcoach-ai-assistant#140)](progress/2026-11-19-T10.8.md)

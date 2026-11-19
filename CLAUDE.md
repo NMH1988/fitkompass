@@ -1,23 +1,24 @@
 # CLAUDE.md
 
-Fitcoach AI Assistant (called Nutrition AI Assistant for Gym Enthusiasts until 2026-10-30, T9.22): a domain-specialised RAG chatbot with tool calling (Turing College, Sprint 2 project, deadline 2026-11-02). Status: in development; see `docs/IMPLEMENTATION_PLAN.md`.
+FitKompass: the Turing College Capstone project (deadline 2026-12-16), a coaching workspace where a coach and a gymer talk in real time and an AI agent turns their conversation into drafts a person approves (Case 2 of the Capstone brief, with one multimodal tool). It continues the Sprint 3 project, Fitcoach AI Assistant (called Nutrition AI Assistant for Gym Enthusiasts until 2026-10-30, T9.22), whose repository https://github.com/NMH1988/fitcoach-ai-assistant this one was cloned from with its full history on 2026-11-19; the code is renamed to FitKompass by T11.2. Status: in development; see `docs/IMPLEMENTATION_PLAN.md` (Epic 11).
 
 The owner writes in Vietnamese: reply in Vietnamese. Everything in the repo is in English: code, comments, docstrings, documentation, commit messages, issues and PRs.
 
 ## Mandatory reading (non-negotiable)
 
 1. **Before writing or changing any code**, in every session: read this whole file and the rules in `.claude/rules/` (the unconditional ones load automatically: `copyright.md`, `workflow.md`, `security-privacy.md`; `testing.md` loads when working on `tests/`).
-2. **Before starting any ticket**: read both briefs, `docs/BRIEF.md` (what the Sprint 2 course brief asks) and `docs/BRIEF_SPRINT3.md` (the Sprint 3 brief and the reviewer's points on Sprint 2), and `docs/PRD.md` (what we build), and check the ticket against them; name what it serves by its number in each brief, then read `docs/PROGRESS.md` (the index of the progress log) and the entries in `docs/progress/` of the tickets this one builds on, changes or names as a follow-up, and run `gh pr list --state open`. If the ticket touches the knowledge base, data, prompts, tests, fixtures or docs content, also read `docs/SOURCES.md`.
-3. If a ticket, plan or prompt contradicts either brief, the PRD or the copyright policy, or a choice changes what the product does, stop, say so and ask the owner. Don't guess. Always flag work neither brief asks for, even when the owner asked for it (label it "beyond the brief (owner's request)").
+2. **Before starting any ticket**: read the Capstone brief, `docs/BRIEF_CAPSTONE.md` (the primary brief from Epic 11 on), and `docs/PRD.md` (what we build), and check the ticket against them; read the Sprint 3 brief `docs/BRIEF_SPRINT3.md` (with the reviewers' points on Sprint 2 and Sprint 3) and the Sprint 2 brief `docs/BRIEF.md` too when the ticket changes something they cover (a review point still open, a requirement an earlier sprint met); name what it serves by its number in the Capstone brief, and in an earlier brief only when it serves one, then read `docs/PROGRESS.md` (the index of the progress log) and the entries in `docs/progress/` of the tickets this one builds on, changes or names as a follow-up, and run `gh pr list --state open`. If the ticket touches the knowledge base, data, prompts, tests, fixtures or docs content, also read `docs/SOURCES.md`.
+3. If a ticket, plan or prompt contradicts the Capstone brief (or an earlier brief it touches), the PRD or the copyright policy, or a choice changes what the product does, stop, say so and ask the owner. Don't guess. Always flag work no brief asks for, even when the owner asked for it (label it "beyond the brief (owner's request)").
 
 ## Where things are
 
 | File | What it holds |
 |---|---|
-| `docs/BRIEF.md` | Summary of the course brief (requirements, optional tasks, evaluation) |
-| `docs/BRIEF_SPRINT3.md` | Summary of the Sprint 3 brief (the agent) and of the reviewer's feedback on Sprint 2 |
+| `docs/BRIEF_CAPSTONE.md` | Summary of the Capstone brief (the primary brief): the cases, Case 2 and Case 4 steps, evaluation, presentation, the case chosen and why |
+| `docs/BRIEF_SPRINT3.md` | Summary of the Sprint 3 brief (the agent) and of the reviewers' feedback on Sprint 2 and Sprint 3 |
+| `docs/BRIEF.md` | Summary of the Sprint 2 course brief (requirements, optional tasks, evaluation) |
 | `docs/PRD.md` | Product decisions, features, guardrails, product-level acceptance criteria |
-| `docs/ARCHITECTURE.md` | Technical design and the approved decisions D1-D8 |
+| `docs/ARCHITECTURE.md` | Technical design and the approved decisions (D1-D23 as built; the Capstone's D24-D29 planned) |
 | `docs/DIAGRAMS.md` | Hand-drawn Mermaid diagrams (the whole app, the RAG search, the tool loop, the store's sharing); its numbers and model names are checked against `src/config/` (T1.16) |
 | `docs/IMPLEMENTATION_PLAN.md` | The plan's index: owner tasks, the order table with each ticket's status, each epic's list of tickets |
 | `docs/tickets/` | One file per ticket (`T<x.y>.md`): Serves, dependencies, acceptance criteria, status, notes |
