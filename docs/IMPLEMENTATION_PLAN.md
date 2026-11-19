@@ -195,7 +195,7 @@ Deadline: **2026-11-02** (Sprint 2, already submitted by the owner, 2026-10-28).
 | [T11.6](tickets/T11.6.md) | NMH1988/fitkompass#13 | (P1) The coach's thread summaries and reply drafts | M | T11.5, O21 | 12-09 | todo |
 | [T11.11](tickets/T11.11.md) | NMH1988/fitkompass#18 | (P1) The coach's own video link and a click counter | S | T11.4a, T11.8 | 12-10 | todo |
 | [T11.12](tickets/T11.12.md) | NMH1988/fitkompass#19 | Evaluation and user tests of the Capstone flows | M | T11.5, T11.9, O22, O23 | 12-12 | todo |
-| [T11.13](tickets/T11.13.md) | NMH1988/fitkompass#20 | The report, the README paragraph, the presentation and the showcase entry | M | all, O23 | 12-15 | todo |
+| [T11.13](tickets/T11.13.md) | NMH1988/fitkompass#20 | The report, the README paragraph, the presentation and the showcase entry | M | all, O23, O24 | 12-15 | todo |
 | **Last** | | | | | | |
 | [T6.2](tickets/T6.2.md) | #20 | README, final checks and transfer to the course repo | S | all, O6 | 11-01 | done |
 
