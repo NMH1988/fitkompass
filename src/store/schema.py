@@ -475,5 +475,30 @@ BEGIN SELECT RAISE(ABORT, 'a new review names its prompt version'); END;
 PRAGMA user_version = 7;
 """
 
+# T11.3 (migration 8): the messages between a coach and a client. A thread is their relationship
+# (a coach_clients row), so a pair that connects again starts a new thread and the earlier one stays
+# readable. The sender must be a side of that relationship and, when writing, the relationship must
+# be active: `messages.send_message()` checks both inside its write transaction (a status filter
+# here would be a second copy of the sharing rule, tests/test_store_access.py). The text's length is
+# checked in code against config.MESSAGE_MAX_CHARS. A message is never changed in place; the thread
+# goes when either side deletes their data (my_data.delete_user_data()).
+_V8 = """
+CREATE TABLE messages (
+    id INTEGER PRIMARY KEY,
+    relationship_id INTEGER NOT NULL REFERENCES coach_clients (id),
+    sender_id TEXT NOT NULL REFERENCES users (id),
+    text TEXT NOT NULL CHECK (length(trim(text)) > 0),
+    created_at TEXT NOT NULL
+        CHECK (created_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T*+00:00'
+            AND date(created_at) IS substr(created_at, 1, 10))
+) STRICT;
+CREATE INDEX messages_relationship ON messages (relationship_id);
+CREATE INDEX messages_sender ON messages (sender_id);
+CREATE TRIGGER messages_never_changed BEFORE UPDATE ON messages
+BEGIN SELECT RAISE(ABORT, 'stored records are never changed in place'); END;
+
+PRAGMA user_version = 8;
+"""
+
 # In order: MIGRATIONS[0] creates version 1, MIGRATIONS[1] takes it to version 2, and so on.
-MIGRATIONS: tuple[str, ...] = (_V1, _V2, _V3, _V4, _V5, _V6, _V7)
+MIGRATIONS: tuple[str, ...] = (_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8)

@@ -24,6 +24,12 @@ question and its answer are separate actions), so no same-event window applies t
 From T9.34, a gymer also sees each list of suggested foods a coach saved about them (a former
 coach's too, as with reviews): the coach's name and the time, never a food or an amount.
 
+From T11.3, each side also sees, for each thread (relationship) they are a side of, active or
+ended, the newest message the other side sent: one notification per thread, never one per
+message, so a conversation does not push the other kinds off the list; a newer message makes it
+unread again. It holds the sender's name and the time, never the text. Reading it is not audited,
+as a thread read by its two sides is not (`messages.py`).
+
 A notification holds its kind, its time, the other side's display name (`users.display_name_of()`,
 not audited), the scope and the week; never a value, a metric, a review's text or a question's or
 answer's text. Reading the relationship and review kinds is not audited: they come from the user's
@@ -59,6 +65,7 @@ Kind = Literal[
     "question_asked",
     "question_answered",
     "suggestions_updated",
+    "message_received",
 ]
 
 # The user's own relationships, either side, their status read as a value from ended_at (never a
@@ -78,6 +85,19 @@ WHERE relationship.coach_id = ? OR relationship.client_id = ? ORDER BY consent.i
 _APPROVED_ABOUT = """
 SELECT id, coach_id, period_start, reviewed_at FROM ai_reviews
 WHERE client_id = ? AND status = 'APPROVED' ORDER BY id
+"""
+# T11.3: per thread the user is a side of, the newest message the other side sent: who sent it and
+# when; never the text. An ended relationship's thread too, as both sides still read it.
+_NEWEST_MESSAGES_TO = """
+SELECT message.id, message.sender_id, message.created_at
+FROM messages AS message
+JOIN coach_clients AS relationship ON relationship.id = message.relationship_id
+WHERE (relationship.coach_id = ? OR relationship.client_id = ?) AND message.sender_id <> ?
+    AND message.id = (
+        SELECT max(newer.id) FROM messages AS newer
+        WHERE newer.relationship_id = message.relationship_id AND newer.sender_id <> ?
+    )
+ORDER BY message.id
 """
 # T9.34: each list of suggested foods a coach saved about a gymer: who saved it and when; never a
 # food or an amount. A former coach's lists too, as an approved review of theirs is.
@@ -99,7 +119,8 @@ _ORDER: dict[str, int] = {
     "question_asked": 4,
     "question_answered": 5,
     "suggestions_updated": 6,
-    "ended": 7,
+    "message_received": 7,
+    "ended": 8,
 }
 
 
@@ -282,6 +303,21 @@ def list_notifications(
                     saved["created_at"],
                     coach,
                     key=("suggestions_updated", saved["id"], saved["created_at"]),
+                )
+            )
+        four = (user_id, user_id, user_id, user_id)
+        for message in conn.execute(_NEWEST_MESSAGES_TO, four).fetchall():
+            # Sent only within a relationship, and both go with a deletion (T11.3).
+            try:
+                sender = name_of(message["sender_id"])
+            except NotFound:
+                continue
+            found.append(
+                Notification(
+                    "message_received",
+                    message["created_at"],
+                    sender,
+                    key=("message_received", message["id"], message["created_at"]),
                 )
             )
         mark = conn.execute(_LATEST_MARK, (user_id,)).fetchone()

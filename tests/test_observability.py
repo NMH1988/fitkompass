@@ -774,6 +774,8 @@ STORE_CANARY_TEXTS = (
     "871.9",
     # T9.34: a suggested food's name (the meal items' names are canaries too).
     "CANARY-FOOD",
+    # T11.3: a message's text.
+    "CANARY-MESSAGE",
 )
 
 
@@ -783,6 +785,7 @@ def _store_scenario(conn, codes: list[str]) -> list[Exception]:
     from src.store import (
         access,
         invitations,
+        messages,
         my_data,
         notifications,
         questions,
@@ -1036,9 +1039,29 @@ def _store_scenario(conn, codes: list[str]) -> list[Exception]:
             questions.NotYourTurn,
         ) as error:
             errors.append(error)
+    # T11.3: a thread on both relationships, read by both sides, then refused writes and reads: a
+    # message too long, a stranger's read and send, and a send after the end (read-only then).
+    for sender, thread in (
+        ("CANARY-GYM", relationship),
+        ("CANARY-COACH", relationship),
+        ("CANARY-NEW", relationship_new),
+    ):
+        messages.send_message(conn, sender, thread, "CANARY-MESSAGE oats and two eggs")
+        messages.list_messages(conn, sender, thread)
+    users.end_relationship(conn, "CANARY-NEW", relationship_new)
+    messages.list_messages(conn, "CANARY-COACH", relationship_new)  # still read after the end
+    for bad in (
+        lambda: messages.send_message(conn, "CANARY-GYM", relationship, "CANARY-MESSAGE " * 100),
+        lambda: messages.list_messages(conn, "other-gym", relationship),
+        lambda: messages.send_message(conn, "other-gym", relationship, "CANARY-MESSAGE stranger"),
+        lambda: messages.send_message(conn, "CANARY-NEW", relationship_new, "CANARY-MESSAGE late"),
+    ):
+        try:
+            bad()
+        except (values.StoreValueError, access.NotFound) as error:
+            errors.append(error)
     # T9.29: the notifications name the canary users and scopes; listing, marking and the
     # gymer's approved (edited) review leave nothing in a log line.
-    users.end_relationship(conn, "CANARY-NEW", relationship_new)
     for user_id in ("CANARY-COACH", "CANARY-GYM", "CANARY-NEW"):
         notifications.list_notifications(conn, user_id)
         notifications.list_notifications(conn, user_id, audited=True)  # the page's read (T9.30)
@@ -1061,7 +1084,8 @@ def test_no_record_or_error_holds_a_stored_value(store_conn, caplog):
     # Each kind of refusal happened, so their messages were checked.
     # T9.7: a gymer's preference is refused; T9.17: two targets; T9.25: three refused thread writes;
     # T9.30: one refused read of a client's question notifications.
-    assert len(errors) == 3 + 6 + 9 + 1 + 2 + 3 + 1 + 2  # T9.34: two refused lists
+    # T9.34: two refused lists; T11.3: four refused thread calls.
+    assert len(errors) == 3 + 6 + 9 + 1 + 2 + 3 + 1 + 2 + 4
     texts = [stream.getvalue(), caplog.text, *(str(e) for e in errors), *(repr(e) for e in errors)]
     # The two refused codes were logged, by reason only (T9.12).
     assert stream.getvalue().count('"event": "invite_refused"') == 2

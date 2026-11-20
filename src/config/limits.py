@@ -16,14 +16,22 @@ RATE_LIMIT_WINDOW_SECONDS = 60
 RATE_LIMIT_PER_SESSION = 50
 
 # The store of signed-in users' data (T9.6, D13; the file is STORE_PATH). How long a write waits
-# for another session's write to finish before it fails.
+# for another session's or process's write (the chat server's, D24) to finish before it fails.
 STORE_BUSY_TIMEOUT_SECONDS = 5
+# How long the checkpoint after a delete (T11.3) waits for another connection's transaction: long
+# enough for a short store call to end, short enough that the write lock it holds while waiting for
+# a reader never stalls the other sessions for long.
+STORE_CHECKPOINT_WAIT_SECONDS = 0.25
 # Longest user ID the store accepts (T9.5's keyed hash is 64 hex characters).
 STORE_ID_MAX_CHARS = 128
 # Longest text the store accepts in any text field (a display name, a preference, a review's JSON
-# is longer and checked by STORE_JSON_MAX_CHARS); T9.5 and T9.7 set tighter limits for their input.
+# is longer and checked by STORE_JSON_MAX_CHARS); T9.5 and T9.7 set tighter limits for their input,
+# and a message between a coach and a client has its own, MESSAGE_MAX_CHARS.
 STORE_TEXT_MAX_CHARS = 500
 STORE_JSON_MAX_CHARS = 100_000
+# Longest message between a coach and a client (T11.3): room for a day's meals or a plan in a few
+# sentences.
+MESSAGE_MAX_CHARS = 1000
 # The display name a user picks at the first sign-in: letters, digits, spaces, dots, hyphens and
 # apostrophes, starting with a letter or digit, 2 to 40 characters after cleaning. It is shown on
 # screen only and never sent to a model (docs/PRD.md, Sprint 3 guardrails).

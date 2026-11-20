@@ -34,7 +34,7 @@ from src import config, exercises, metrics
 from src.profile import ActivityLevel, Goal, Sex
 from src.store import suggestions, values
 from src.store.access import NotFound, audit, authorise_read, authorised_read, role_of
-from src.store.db import transaction
+from src.store.db import checkpoint, transaction
 
 Meal = Literal["breakfast", "lunch", "dinner", "snack"]
 # Who may set a target through add_target() and the profile Save: the app or the gymer. A coach's
@@ -663,3 +663,5 @@ def delete_record(conn: sqlite3.Connection, user_id: str, kind: RecordKind, reco
                 cursor = conn.execute(_DELETE_PREFERENCE, params)
         if cursor.rowcount != 1:
             raise NotFound
+    # After the commit: the deleted entry's earlier copies leave the write-ahead log too (T11.3).
+    checkpoint(conn)

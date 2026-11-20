@@ -152,7 +152,7 @@ The edge cases that the Sprint 3 tickets' criteria, Notes and `docs/PROGRESS.md`
 
 **Signed-in users, the store and the pages**
 
-11. **The store** (T9.6; accepted by the owner, 2026-10-27): the file is not encrypted and has no backups; deleted rows may stay in free disk blocks through the rollback journal; turning a scope on again shows the days logged while it was off. The Capstone moves to PostgreSQL (D13).
+11. **The store** (T9.6; accepted by the owner, 2026-10-27): the file is not encrypted and has no backups; deleted rows may stay in free disk blocks through the rollback journal and, since T11.3, the write-ahead log (its `-wal` file is truncated after a delete unless another connection's read or store call outlasts the checkpoint's short wait, otherwise once a later checkpoint completes or the last connection closes); turning a scope on again shows the days logged while it was off. The Capstone keeps SQLite (D25).
 12. **Sign-in** (T9.5, T9.24): Streamlit's identity cookie lasts 30 days and is shared across tabs; a deleted demo user is gone until the app restarts; when the store fails, a gymer gets the guest's chat (accepted by the owner, 2026-11-02).
 13. **Invitations** (T9.12): the code's hash is not salted; a code is a bearer secret until it is used; the daily limit counts per account. Suggested: a keyed hash (as for user IDs) and a shorter expiry.
 14. **Audit volume** (T9.15): the dashboards write one audit row per scope and client on every page run, with no retention period; the client list is drawn twice (table and cards) and CSS hides one. Suggested: a retention period (the Capstone) and one layout.

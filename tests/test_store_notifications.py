@@ -451,3 +451,89 @@ def test_a_coach_s_deletion_takes_the_list_s_notification_with_it(people):
     _suggest(people, COACH, GYM)
     my_data.delete_user_data(people, COACH, no_threads)
     assert all(kind != "suggestions_updated" for kind, *_ in _seen(people, GYM))
+
+
+# --- T11.3: the newest message from the other side, one per thread --------------------------------
+
+
+def _message(conn, relationship: int, sender: str, text: str, at: int) -> int:
+    """Insert a message with a seeded time (seconds after T0); return its ID."""
+    cursor = conn.execute(
+        "INSERT INTO messages (relationship_id, sender_id, text, created_at) VALUES (?, ?, ?, ?)",
+        (relationship, sender, text, _at(at)),
+    )
+    return cursor.lastrowid
+
+
+def _told_of_messages(conn, user_id: str) -> list:
+    """Return the user's message notifications."""
+    return [
+        n for n in notifications.list_notifications(conn, user_id) if n.kind == "message_received"
+    ]
+
+
+def test_each_side_is_told_of_the_other_side_s_newest_message_once_per_thread(people):
+    """Three messages from the gymer are one notification for the coach, at the newest's time."""
+    rel = _relationship(people, COACH, GYM, accepted=0)
+    _message(people, rel, GYM, "CANARY-MSG one", 10)
+    _message(people, rel, GYM, "CANARY-MSG two", 20)
+    newest = _message(people, rel, GYM, "CANARY-MSG three", 30)
+    _message(people, rel, COACH, "CANARY-MSG reply", 40)
+    [told] = _told_of_messages(people, COACH)
+    assert (told.other_name, told.at, told.key) == (
+        "Gym Noor",
+        _at(30),
+        ("message_received", newest, _at(30)),
+    )
+    [told] = _told_of_messages(people, GYM)
+    assert (told.other_name, told.at) == ("Coach Nia", _at(40))
+    for user in (COACH, GYM):
+        for found in notifications.list_notifications(people, user):
+            assert "CANARY" not in repr(found)
+
+
+def test_a_newer_message_makes_the_thread_s_notification_unread_again(people, monkeypatch):
+    """After the mark, the next message from the other side shows the thread as unread."""
+    rel = _relationship(people, COACH, GYM, accepted=0)
+    _message(people, rel, GYM, "Hi", 10)
+    _clock(monkeypatch, 20)
+    notifications.mark_all_read(people, COACH)
+    assert "message_received" not in _unread(people, COACH)
+    _message(people, rel, GYM, "Again", 30)
+    assert _unread(people, COACH).count("message_received") == 1
+
+
+def test_one_notification_per_thread_and_nobody_else_is_told(people):
+    """A coach with two clients gets one per thread; the other users see none of it."""
+    first = _relationship(people, COACH, GYM, accepted=0)
+    second = _relationship(people, COACH, OTHER_GYM, accepted=0)
+    _message(people, first, GYM, "Hi", 10)
+    _message(people, second, OTHER_GYM, "Hello", 20)
+    assert [n.other_name for n in _told_of_messages(people, COACH)] == ["Gym Oskar", "Gym Noor"]
+    assert _told_of_messages(people, OTHER_COACH) == []
+    assert _told_of_messages(people, GYM) == []  # their own message only
+
+
+def test_an_ended_thread_s_message_stays_told_with_the_name(people):
+    """Both sides still read an ended thread, so its notification stays, the name with it."""
+    rel = _relationship(people, COACH, GYM, accepted=0, ended=100)
+    _message(people, rel, COACH, "Good luck!", 50)
+    assert [(n.other_name, n.at) for n in _told_of_messages(people, GYM)] == [
+        ("Coach Nia", _at(50))
+    ]
+
+
+def test_a_deletion_takes_the_thread_s_notification_with_it(people):
+    """The thread goes with either side's data, and its notification with it."""
+    rel = _relationship(people, COACH, GYM, accepted=0)
+    _message(people, rel, COACH, "Hi", 10)
+    my_data.delete_user_data(people, COACH, no_threads)
+    assert _told_of_messages(people, GYM) == []
+
+
+def test_reading_the_message_notifications_writes_no_audit_row(people):
+    """Like a thread read, the message notifications are not audited, on any page."""
+    rel = _relationship(people, COACH, GYM, accepted=0)
+    _message(people, rel, GYM, "Hi", 10)
+    notifications.list_notifications(people, COACH, audited=True)
+    assert people.execute("SELECT count(*) FROM audit_log").fetchone()[0] == 0

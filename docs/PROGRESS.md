@@ -21,6 +21,7 @@ Keep the entry short and record what the code does not say. `tests/test_docs_lay
 
 ---
 
+- [2026-11-20 · T11.3 Coach-client messages in the store · NMH1988/fitkompass#<PR> (closes NMH1988/fitkompass#9)](progress/2026-11-20-T11.3.md)
 - [2026-11-20 · T11.2 Rename the app to FitKompass · NMH1988/fitkompass#23 (closes NMH1988/fitkompass#8)](progress/2026-11-20-T11.2.md)
 - [2026-11-19 · Plan Epic 11: the owner's approved criteria and choices for T11.2-T11.13 · NMH1988/fitkompass#22 (closes NMH1988/fitkompass#21)](progress/2026-11-19-plan-epic-11-criteria.md)
 - [2026-11-19 · T11.1 Capstone plan: the brief, the PRD section, decisions D24-D29 and Epic 11 · NMH1988/fitkompass#7 (closes NMH1988/fitkompass#6)](progress/2026-11-19-T11.1.md)

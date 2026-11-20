@@ -1089,6 +1089,10 @@ def test_a_notification_s_time_is_shown_in_berlin(stamp, shown):
          "Bo updated the foods they suggest to you."),
         (_notification("suggestions_updated"), "gymer", "de",
          "Bo hat die vorgeschlagenen Lebensmittel geändert."),
+        # T11.3: the sender's name only, never the message's text; either side.
+        (_notification("message_received"), "coach", "en", "Bo sent you a message."),
+        (_notification("message_received"), "gymer", "de",
+         "Bo hat Ihnen eine Nachricht geschickt."),
     ],
 )  # fmt: skip
 def test_each_kind_reads_as_its_sentence(notification, role, language, text):

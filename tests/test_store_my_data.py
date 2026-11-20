@@ -3,10 +3,21 @@
 import json
 import sqlite3
 from datetime import date
+from pathlib import Path
 
 import pytest
 
-from src.store import access, db, my_data, questions, records, reviews, suggestions, users
+from src.store import (
+    access,
+    db,
+    messages,
+    my_data,
+    questions,
+    records,
+    reviews,
+    suggestions,
+    users,
+)
 from tests import store_world as world
 from tests.store_world import no_threads
 
@@ -14,6 +25,7 @@ NOW = "2026-10-27T10:00:00+00:00"
 SUGGESTED = suggestions.SuggestedFood("breakfast", 9001, "CANARY-FOOD oats", 80.0)
 QUESTION = "CANARY-QUESTION why fewer carbs?"
 ANSWER = "CANARY-ANSWER rest days need less."
+MESSAGE = "CANARY-MESSAGE had oats and two eggs"
 
 
 @pytest.fixture
@@ -43,6 +55,22 @@ def full_world(store_conn):
     # T9.34: each coach suggests foods to their client (an audited suggestions_set each).
     for coach, client in ((world.COACH_A, world.SHARED), (world.COACH_B, world.OTHERS)):
         suggestions.add_client_suggestions(store_conn, coach, client, [SUGGESTED])
+    # T11.3: a thread for each relationship. Coach A writes to the client who shares nothing, so
+    # that client sends nothing; the ended thread's message is written as it was before the end.
+    threads = {
+        gymer: store_conn.execute(
+            "SELECT id FROM coach_clients WHERE client_id = ?", (gymer,)
+        ).fetchone()[0]
+        for gymer in world.GYMERS
+    }
+    messages.send_message(store_conn, world.SHARED, threads[world.SHARED], MESSAGE)
+    messages.send_message(store_conn, world.COACH_A, threads[world.SHARED], "Nice, log it.")
+    messages.send_message(store_conn, world.COACH_A, threads[world.UNSHARED], "Welcome!")
+    messages.send_message(store_conn, world.OTHERS, threads[world.OTHERS], "Coach B, hi.")
+    store_conn.execute(
+        "INSERT INTO messages (relationship_id, sender_id, text, created_at) VALUES (?, ?, ?, ?)",
+        (threads[world.ENDED], world.ENDED, "Thanks for everything.", NOW),
+    )
     # T9.12 adds the functions for these two tables; the rows are written directly here.
     for coach in (world.COACH_A, world.COACH_B):
         store_conn.execute(
@@ -110,6 +138,7 @@ def test_the_store_has_the_columns_this_test_expects(full_world):
         ("notification_reads", "user_id"),
         ("food_suggestion_lists", "client_id"),
         ("food_suggestion_lists", "coach_id"),
+        ("messages", "sender_id"),
     }
 
 
@@ -175,6 +204,11 @@ def test_a_gymers_export_holds_all_their_rows_as_json(full_world):
     assert (listed["client_id"], listed["coach_id"]) == (world.SHARED, world.COACH_A)
     [item] = document["food_suggestion_items"]
     assert (item["list_id"], item["food_name"]) == (listed["id"], SUGGESTED.food_name)
+    # T11.3: the whole thread with coach A, both sides' messages.
+    assert [(m["sender_id"], m["text"]) for m in document["messages"]] == [
+        (world.SHARED, MESSAGE),
+        (world.COACH_A, "Nice, log it."),
+    ]
 
 
 def test_a_coachs_export_holds_their_relationships_reviews_and_invitations(full_world):
@@ -306,12 +340,80 @@ def test_deleting_either_side_removes_their_suggestion_lists_and_items(full_worl
         assert sorted(flags) == [0, 1]
 
 
+def _store_bytes(path: Path) -> bytes:
+    """Return the bytes of the store file and of its write-ahead log, if there is one."""
+    wal = Path(f"{path}-wal")
+    return path.read_bytes() + (wal.read_bytes() if wal.exists() else b"")
+
+
+def _message_texts(document):
+    """Return the texts of an export's messages, in order."""
+    return [m["text"] for m in document["messages"]]
+
+
+def test_both_sides_export_every_thread_they_are_a_side_of_and_no_other(full_world):
+    """A coach exports each client's thread, ended ones too; a gymer only their own threads."""
+    export = {
+        user: json.loads(my_data.export_user_data(full_world, user))
+        for user in (world.COACH_A, world.COACH_B, world.ENDED, world.UNSHARED)
+    }
+    assert _message_texts(export[world.COACH_A]) == [
+        MESSAGE,
+        "Nice, log it.",
+        "Welcome!",
+        "Thanks for everything.",
+    ]
+    assert _message_texts(export[world.COACH_B]) == ["Coach B, hi."]
+    assert _message_texts(export[world.ENDED]) == ["Thanks for everything."]
+    assert _message_texts(export[world.UNSHARED]) == ["Welcome!"]
+
+
+def test_exporting_the_threads_writes_no_audit_row(full_world):
+    """Thread reads are not audited, in the export too: a gymer's export adds no row at all."""
+    before = full_world.execute("SELECT count(*) FROM audit_log").fetchone()[0]
+    my_data.export_user_data(full_world, world.UNSHARED)  # coach A wrote to them; no review
+    assert full_world.execute("SELECT count(*) FROM audit_log").fetchone()[0] == before
+
+
+@pytest.mark.parametrize("user", [world.SHARED, world.COACH_A])
+def test_deleting_either_side_removes_their_threads_and_keeps_the_others(full_world, user):
+    """A thread goes with either side's data, both sides' messages; other threads stay whole."""
+    my_data.delete_user_data(full_world, user, no_threads)
+    left = [row[0] for row in full_world.execute("SELECT text FROM messages ORDER BY id")]
+    if user == world.SHARED:
+        assert left == ["Welcome!", "Coach B, hi.", "Thanks for everything."]
+    else:
+        assert left == ["Coach B, hi."]
+
+
+def test_deleting_one_entry_leaves_its_value_in_neither_file(tmp_path):
+    """After records.delete_record(), the deleted entry is gone from the file and its -wal file."""
+    path = tmp_path / "s.sqlite3"
+    with db.connect(path) as conn:
+        world.build(conn)
+        records.add_preference(conn, world.COACH_A, "CANARY-ONE-ENTRY-DELETED")
+        [entry] = [
+            p
+            for p in records.list_preferences(conn, world.COACH_A, world.COACH_A)
+            if p["text"] == "CANARY-ONE-ENTRY-DELETED"
+        ]
+        assert b"CANARY-ONE-ENTRY-DELETED" in _store_bytes(path)
+        records.delete_record(conn, world.COACH_A, "preferences", entry["id"])
+        # While the store is still open: the delete checkpointed the log after its commit.
+        assert Path(f"{path}-wal").stat().st_size == 0
+        assert b"CANARY-ONE-ENTRY-DELETED" not in _store_bytes(path)
+
+
 def test_deleted_values_are_gone_from_the_files_bytes(tmp_path):
-    """After delete_user_data(), the deleted text is nowhere in the database file."""
+    """After delete_user_data(), the deleted text is in neither the file nor its -wal file."""
     path = tmp_path / "s.sqlite3"
     with db.connect(path) as conn:
         world.build(conn)
         records.add_preference(conn, world.COACH_A, "CANARY-PREF-DELETED")
+        thread = conn.execute(
+            "SELECT id FROM coach_clients WHERE client_id = ?", (world.SHARED,)
+        ).fetchone()[0]
+        messages.send_message(conn, world.SHARED, thread, "CANARY-MESSAGE-DELETED")
         records.add_meal_item(
             conn,
             world.SHARED,
@@ -326,14 +428,22 @@ def test_deleted_values_are_gone_from_the_files_bytes(tmp_path):
             fat_g=1.0,
             fiber_g=None,
         )
-        before = path.read_bytes()  # the checks below can fail
+        before = _store_bytes(path)  # the checks below can fail
         assert b"CANARY-FOOD-DELETED" in before and b"CANARY-PREF-DELETED" in before
+        assert b"CANARY-MESSAGE-DELETED" in before
         my_data.delete_user_data(conn, world.SHARED, no_threads)
         my_data.delete_user_data(conn, world.COACH_A, no_threads)
         # Other users' rows are still there, so the pages were reused, not dropped.
         assert records.list_preferences(conn, world.COACH_B, world.COACH_B)
-    data = path.read_bytes()
+        # While the store is still open (as the app and the chat server keep it): the delete
+        # checkpointed the log, so no earlier copy of a deleted row is left in the -wal file.
+        assert Path(f"{path}-wal").stat().st_size == 0
+        data = _store_bytes(path)
+        assert b"CANARY-PREF-DELETED" not in data and b"CANARY-FOOD-DELETED" not in data
+        assert b"CANARY-MESSAGE-DELETED" not in data
+    data = _store_bytes(path)
     assert b"CANARY-PREF-DELETED" not in data and b"CANARY-FOOD-DELETED" not in data
+    assert b"CANARY-MESSAGE-DELETED" not in data
     assert not (tmp_path / "s.sqlite3-journal").exists()
 
 

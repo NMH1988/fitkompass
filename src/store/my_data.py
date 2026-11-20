@@ -5,15 +5,19 @@ of, the reviews they may read (a gymer's approved reviews about them without the
 coach's own reviews of clients who still share nutrition and every other scope each review used,
 with the reviews' evidence and scopes), the questions to the coach and the answers under the
 approved ones among them (T9.25), the audit rows by or about them, the user's own notification
-read mark (T9.29; never the other side's) and the foods coaches suggested to them (T9.34).
+read mark (T9.29; never the other side's), the foods coaches suggested to them (T9.34) and every
+message of the threads they are a side of, both sides' messages, ended relationships' too (T11.3).
 The delete removes the user's rows in every table, their relationships and scopes, the
 reviews about them and those they wrote as a coach (with their evidence, questions and answers),
 every question or answer the user wrote, the lists of suggested foods between the user and a coach
-or client (T9.34), the invitations and code attempts, the read mark, and the
+or client (T9.34), the messages of every thread the user is a side of (T11.3), so a thread goes
+when either side deletes their data, the invitations and code attempts, the read mark, and the
 audit rows by or about them: the app is local and keeps no audit duty (the owner may change this).
 It runs in one transaction with foreign keys on, and no reference cascades, so a table this list
 forgets makes the delete fail instead of leaving rows behind. The review workflow's threads in its
-checkpointer file go too, through the caller's `delete_threads` (T9.16).
+checkpointer file go too, through the caller's `delete_threads` (T9.16). After the commit the
+store's write-ahead log is checkpointed and emptied, so the deleted rows' earlier copies are not
+left in its `-wal` file.
 """
 
 import json
@@ -22,7 +26,7 @@ from collections.abc import Callable
 
 from src.store import values
 from src.store.access import NotFound, audit, role_of
-from src.store.db import transaction
+from src.store.db import checkpoint, transaction
 
 _USER = "SELECT * FROM users WHERE id = ?"
 _PROFILES = "SELECT * FROM profile_entries WHERE user_id = ? ORDER BY id"
@@ -153,6 +157,13 @@ SELECT item.* FROM food_suggestion_items AS item
 JOIN food_suggestion_lists AS list ON list.id = item.list_id
 WHERE list.client_id = ? ORDER BY item.id
 """
+# The messages of every thread the user is a side of, active or ended, both sides' (T11.3): both
+# sides read the whole thread, so both exports hold it.
+_MESSAGES = """
+SELECT message.* FROM messages AS message
+JOIN coach_clients AS relationship ON relationship.id = message.relationship_id
+WHERE relationship.coach_id = ? OR relationship.client_id = ? ORDER BY message.id
+"""
 
 # The delete, children before parents. The threads under the reviews about or by the user go with
 # them, and every question or answer the user wrote (T9.25).
@@ -182,6 +193,13 @@ SELECT thread_id FROM ai_reviews
 WHERE (client_id = ? OR coach_id = ?) AND thread_id IS NOT NULL ORDER BY id
 """
 _DELETE_AUDIT = "DELETE FROM audit_log WHERE actor_id = ? OR subject_id = ?"
+# Every thread the user is a side of, with both sides' messages (T11.3), and any message the user
+# sent (always in one of those threads; named too, so the delete never depends on it).
+_DELETE_MESSAGES = """
+DELETE FROM messages
+WHERE sender_id = ?
+    OR relationship_id IN (SELECT id FROM coach_clients WHERE coach_id = ? OR client_id = ?)
+"""
 _DELETE_CONSENTS = """
 DELETE FROM consents
 WHERE relationship_id IN (SELECT id FROM coach_clients WHERE coach_id = ? OR client_id = ?)
@@ -257,6 +275,7 @@ def export_user_data(conn: sqlite3.Connection, user_id: str) -> str:
             "notification_reads": [dict(r) for r in conn.execute(_READ_MARKS, one)],
             "food_suggestion_lists": [dict(r) for r in conn.execute(_SUGGESTION_LISTS, one)],
             "food_suggestion_items": [dict(r) for r in conn.execute(_SUGGESTION_ITEMS, one)],
+            "messages": [dict(r) for r in conn.execute(_MESSAGES, both)],
         }
     return json.dumps(document, ensure_ascii=False, indent=2)
 
@@ -287,6 +306,7 @@ def delete_user_data(
         conn.execute(_DELETE_SUGGESTION_ITEMS, both)
         conn.execute(_DELETE_SUGGESTION_LISTS, both)
         conn.execute(_DELETE_AUDIT, both)
+        conn.execute(_DELETE_MESSAGES, (user_id, user_id, user_id))
         conn.execute(_DELETE_CONSENTS, both)
         conn.execute(_DELETE_RELATIONSHIPS, both)
         conn.execute(_DELETE_INVITATIONS, one)
@@ -301,3 +321,5 @@ def delete_user_data(
         conn.execute(_DELETE_READ_MARKS, one)
         conn.execute(_DELETE_USER, one)
         delete_threads(threads)
+    # After the commit: the deleted rows' earlier copies leave the write-ahead log too.
+    checkpoint(conn)

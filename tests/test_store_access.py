@@ -10,11 +10,23 @@ import ast
 import importlib
 import inspect
 import re
+import sqlite3
 from pathlib import Path
 
 import pytest
 
-from src.store import access, invitations, questions, records, reviews, suggestions, users
+from src import config
+from src.store import (
+    access,
+    invitations,
+    messages,
+    questions,
+    records,
+    reviews,
+    suggestions,
+    users,
+    values,
+)
 from src.store.values import StoreValueError
 from tests import store_world as world
 
@@ -130,6 +142,7 @@ WRITES = {
 }
 INTERNALS = {
     # No user data in or out: opening the file, checks, and the access layer itself.
+    "db.checkpoint",
     "db.connect",
     "db.migrate",
     "db.prepare_file",
@@ -163,6 +176,11 @@ COACH_WRITES = {
 # the other side's display name, allowed for both sides of an active or ended relationship, checked
 # by the function itself and not audited (owner's choices, 2026-10-28 and 2026-11-03).
 NAME_READS = {"users.display_name_of"}
+
+# The thread between a coach and a client (T11.3): read by its two sides, also after the end, and
+# written by them only while the relationship is active, checked by the relationship itself (no
+# scope) and not audited (owner's choices, 2026-11-19); tested at the end of this file.
+THREAD_FUNCTIONS = {"messages.send_message", "messages.list_messages"}
 
 
 # SQL that filters on a relationship being active or not ended (a comparison, IN, LIKE, GLOB or
@@ -291,7 +309,15 @@ def test_every_public_store_function_is_classified():
             and not name.startswith("_")
         }
     reads = {f"{READS[name][0].__module__.rsplit('.', 1)[1]}.{name}" for name in READS}
-    groups = [reads, OWN_ONLY, WRITES, INTERNALS, NAME_READS, set(COACH_WRITES)]
+    groups = [
+        reads,
+        OWN_ONLY,
+        WRITES,
+        INTERNALS,
+        NAME_READS,
+        set(COACH_WRITES),
+        THREAD_FUNCTIONS,
+    ]
     assert found == set().union(*groups)
     assert sum(len(group) for group in groups) == len(found)  # no function in two groups
 
@@ -745,3 +771,178 @@ def test_a_coach_write_needs_its_scope_while_others_are_shared(store_conn, relat
     COACH_WRITE_CALLS[write](store_conn, world.COACH_A, world.SHARED)  # allowed once shared again
     [row] = _audit_rows(store_conn)
     assert row["action"] == COACH_WRITE_ACTIONS[write]
+
+
+# --- The thread between a coach and a client (T11.3) ---------------------------------------------
+
+# (actor, the gymer whose relationship is the thread): the two sides of every active relationship.
+THREAD_SIDES = {
+    "a coach, their client sharing everything": (world.COACH_A, world.SHARED),
+    "a client sharing everything, their coach": (world.SHARED, world.SHARED),
+    "a coach, their client sharing nothing": (world.COACH_A, world.UNSHARED),
+    "a client sharing nothing, their coach": (world.UNSHARED, world.UNSHARED),
+    "another coach, their client": (world.COACH_B, world.OTHERS),
+    "that client, their coach": (world.OTHERS, world.OTHERS),
+}
+ENDED_SIDES = {
+    "a former coach": (world.COACH_A, world.ENDED),
+    "a former client": (world.ENDED, world.ENDED),
+}
+THREAD_STRANGERS = {
+    "a stranger coach": (world.COACH_B, world.SHARED),
+    "a stranger gymer": (world.UNSHARED, world.SHARED),
+    "a former coach of another client": (world.COACH_A, world.OTHERS),
+    "a former client on their coach's other thread": (world.ENDED, world.SHARED),
+    "another coach's client on a thread of coach A": (world.OTHERS, world.UNSHARED),
+    "a missing user": (world.MISSING, world.SHARED),
+}
+BAD_ACTORS = {"no text": None, "a number": 5, "empty": "", "too long": "x" * 1000}
+BAD_THREADS = {
+    "missing": 9999,
+    "zero": 0,
+    "negative": -1,
+    "text": "1",
+    "a bool": True,
+    "a float": 1.0,
+    "None": None,
+}
+TEXT = "CANARY-MESSAGE had oats and two eggs"
+
+
+def _message_count(conn):
+    """Return how many messages the store holds."""
+    return conn.execute("SELECT count(*) FROM messages").fetchone()[0]
+
+
+def _coach_of(gymer):
+    """Return the coach of a gymer in the made-up world."""
+    return world.COACH_B if gymer == world.OTHERS else world.COACH_A
+
+
+@pytest.mark.parametrize("case", THREAD_SIDES)
+def test_both_sides_of_an_active_relationship_write_and_read_the_thread(
+    store_conn, relationships, case
+):
+    """Each side sends to its own thread and both read it, oldest first, with no audit row."""
+    actor, gymer = THREAD_SIDES[case]
+    thread = relationships[gymer]
+    other = _coach_of(gymer) if actor == gymer else gymer
+    first = messages.send_message(store_conn, actor, thread, TEXT)
+    second = messages.send_message(store_conn, other, thread, "Ok!")
+    for reader in (actor, other):
+        found = messages.list_messages(store_conn, reader, thread)
+        assert [(m["id"], m["sender_id"], m["text"]) for m in found] == [
+            (first, actor, TEXT),
+            (second, other, "Ok!"),
+        ]
+        assert all(m["relationship_id"] == thread for m in found)
+    assert _audit_rows(store_conn) == []
+
+
+@pytest.mark.parametrize("case", ENDED_SIDES)
+def test_after_the_end_both_sides_still_read_the_thread_but_nobody_writes(
+    store_conn, relationships, case
+):
+    """A thread whose relationship ended is read-only: read by both sides, a send is NotFound."""
+    actor, gymer = ENDED_SIDES[case]
+    thread = relationships[gymer]
+    # A message from before the end, written as the store held it then.
+    store_conn.execute(
+        "INSERT INTO messages (relationship_id, sender_id, text, created_at) VALUES (?, ?, ?, ?)",
+        (thread, world.ENDED, TEXT, "2026-10-26T09:00:00+00:00"),
+    )
+    assert [m["text"] for m in messages.list_messages(store_conn, actor, thread)] == [TEXT]
+    with pytest.raises(access.NotFound, match="^not found$"):
+        messages.send_message(store_conn, actor, thread, "Still there?")
+    assert _message_count(store_conn) == 1
+    assert _audit_rows(store_conn) == []
+
+
+@pytest.mark.parametrize("case", THREAD_STRANGERS)
+def test_anyone_else_gets_the_same_not_found_and_writes_nothing(store_conn, relationships, case):
+    """A stranger, a side of another relationship or a missing user can neither read nor send."""
+    actor, gymer = THREAD_STRANGERS[case]
+    thread = relationships[gymer]
+    messages.send_message(store_conn, gymer, thread, TEXT)
+    with pytest.raises(access.NotFound, match="^not found$"):
+        messages.list_messages(store_conn, actor, thread)
+    with pytest.raises(access.NotFound, match="^not found$"):
+        messages.send_message(store_conn, actor, thread, "Hello")
+    assert _message_count(store_conn) == 1
+    assert _audit_rows(store_conn) == []
+
+
+@pytest.mark.parametrize("bad", BAD_ACTORS.values(), ids=BAD_ACTORS)
+def test_an_actor_that_is_not_a_user_id_gets_not_found(store_conn, relationships, bad):
+    """A malformed acting user is the same NotFound as a stranger, for a read and a send."""
+    with pytest.raises(access.NotFound, match="^not found$"):
+        messages.list_messages(store_conn, bad, relationships[world.SHARED])
+    with pytest.raises(access.NotFound, match="^not found$"):
+        messages.send_message(store_conn, bad, relationships[world.SHARED], "Hello")
+    assert _message_count(store_conn) == 0
+
+
+@pytest.mark.parametrize("bad", BAD_THREADS.values(), ids=BAD_THREADS)
+def test_a_thread_that_is_not_a_relationship_id_gets_not_found(store_conn, relationships, bad):
+    """A missing or malformed thread ID is the same NotFound, for a read and a send."""
+    with pytest.raises(access.NotFound, match="^not found$"):
+        messages.list_messages(store_conn, world.COACH_A, bad)
+    with pytest.raises(access.NotFound, match="^not found$"):
+        messages.send_message(store_conn, world.COACH_A, bad, "Hello")
+    assert _message_count(store_conn) == 0
+
+
+def test_a_pair_that_connects_again_gets_a_new_thread_and_keeps_the_old_one_read_only(
+    store_conn, relationships
+):
+    """A new relationship is a new thread; the ended one is still read by both, never written."""
+    old = relationships[world.ENDED]
+    new = users.start_relationship(store_conn, world.COACH_A, world.ENDED)
+    messages.send_message(store_conn, world.ENDED, new, TEXT)
+    assert messages.list_messages(store_conn, world.COACH_A, old) == []
+    assert [m["text"] for m in messages.list_messages(store_conn, world.COACH_A, new)] == [TEXT]
+    with pytest.raises(access.NotFound):
+        messages.send_message(store_conn, world.COACH_A, old, "Old thread")
+
+
+def test_a_read_after_an_id_returns_only_the_later_messages(store_conn, relationships):
+    """after_id gives the messages a page has not shown yet (a reconnect, T11.4a)."""
+    thread = relationships[world.SHARED]
+    ids = [messages.send_message(store_conn, world.SHARED, thread, f"m{n}") for n in range(3)]
+    later = messages.list_messages(store_conn, world.COACH_A, thread, after_id=ids[0])
+    assert [m["id"] for m in later] == ids[1:]
+    assert messages.list_messages(store_conn, world.COACH_A, thread, after_id=ids[2]) == []
+
+
+@pytest.mark.parametrize("bad", [-1, "1", True, 1.5, None])
+def test_after_id_must_be_a_whole_number(store_conn, relationships, bad):
+    """A bad after_id is refused by name, before anything is read."""
+    with pytest.raises(values.StoreValueError, match="after_id"):
+        messages.list_messages(store_conn, world.COACH_A, relationships[world.SHARED], after_id=bad)
+
+
+def test_a_message_up_to_the_configured_length_is_stored(store_conn, relationships):
+    """The longest message config allows is stored whole."""
+    text = "x" * config.MESSAGE_MAX_CHARS
+    messages.send_message(store_conn, world.SHARED, relationships[world.SHARED], text)
+    found = messages.list_messages(store_conn, world.SHARED, relationships[world.SHARED])
+    assert [m["text"] for m in found] == [text]
+
+
+@pytest.mark.parametrize(
+    "bad",
+    ["", "   \n", None, 42, "CANARY-LONG " + "x" * config.MESSAGE_MAX_CHARS, "CANARY \ud800"],
+)
+def test_a_bad_message_is_refused_by_name_and_nothing_is_written(store_conn, relationships, bad):
+    """Empty, blank, non-text, too long or unencodable text is refused; the error names no value."""
+    with pytest.raises(values.StoreValueError) as raised:
+        messages.send_message(store_conn, world.SHARED, relationships[world.SHARED], bad)
+    assert "text" in str(raised.value) and "CANARY" not in str(raised.value)
+    assert _message_count(store_conn) == 0
+
+
+def test_a_message_is_never_changed_in_place(store_conn, relationships):
+    """The table's trigger refuses an UPDATE, so a sent message stays as it was sent."""
+    messages.send_message(store_conn, world.SHARED, relationships[world.SHARED], TEXT)
+    with pytest.raises(sqlite3.IntegrityError, match="never changed in place"):
+        store_conn.execute("UPDATE messages SET text = 'changed'")
