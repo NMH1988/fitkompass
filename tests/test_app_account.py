@@ -708,7 +708,7 @@ def test_the_start_page_has_no_sidebar_and_a_short_disclaimer(monkeypatch):
     assert not at.sidebar.button and not at.sidebar.caption and not at.sidebar.markdown
     assert not at.warning
     assert config.DISCLAIMER in "".join(str(c.value) for c in at.caption)
-    assert at.title[0].value == "Fitcoach AI Assistant"
+    assert at.title[0].value == "FitKompass"
 
 
 def test_the_start_page_language_link_switches_the_language(monkeypatch):

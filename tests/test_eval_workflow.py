@@ -102,7 +102,13 @@ def test_no_script_names_the_key_or_an_expression():
 
 def test_tracing_and_other_keys_stay_off():
     """No LangSmith, tracing or USDA setting is passed, so nothing else leaves the runner."""
-    for name in ("LANGSMITH", "FITCOACH_TRACING", "USDA_FDC_API_KEY", "DEMO_MODE"):
+    for name in (
+        "LANGSMITH",
+        config.TRACING_FLAG_NAME,
+        "FITCOACH",
+        "USDA_FDC_API_KEY",
+        "DEMO_MODE",
+    ):
         assert name not in _text()
 
 

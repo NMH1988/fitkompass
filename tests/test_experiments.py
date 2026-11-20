@@ -163,7 +163,7 @@ def test_the_first_upload_creates_the_dataset_and_its_examples():
     """The file's dataset is made with every variant, the profile only in the profile one."""
     client = FakeLangSmith()
     synced = experiments.sync_dataset(client, QUESTIONS_FILE, ITEMS)
-    assert synced.name == "fitcoach-eval-eval_questions"
+    assert synced.name == "fitkompass-eval-eval_questions"
     assert (synced.created, synced.updated, synced.deleted) == (3, 0, 0)
     stored = {
         example.metadata["question_id"] + str(example.metadata["with_profile"]): example
@@ -257,10 +257,10 @@ def test_the_experiment_is_named_by_commit_model_language_and_time():
     started = datetime(2026, 11, 12, 21, 5, 9)
     assert (
         experiments.experiment_name("a" * 40, False, "openai/gpt-5-mini", "de", started)
-        == "fitcoach-eval-aaaaaaa-openai_gpt-5-mini-de-20261112-210509"
+        == "fitkompass-eval-aaaaaaa-openai_gpt-5-mini-de-20261112-210509"
     )
     assert experiments.experiment_name(None, None, "m", "en", started).startswith(
-        "fitcoach-eval-no-git-m-en-"
+        "fitkompass-eval-no-git-m-en-"
     )
     assert "-aaaaaaa-dirty-" in experiments.experiment_name("a" * 40, True, "m", "en", started)
 
@@ -270,7 +270,7 @@ def test_the_experiment_s_project_is_linked_to_the_dataset():
     client = FakeLangSmith()
     synced = experiments.sync_dataset(client, QUESTIONS_FILE, ITEMS)
     experiment = experiments.start_experiment(
-        client, synced, name="fitcoach-eval-x", metadata={"commit": "abc"}, repeat=3
+        client, synced, name="fitkompass-eval-x", metadata={"commit": "abc"}, repeat=3
     )
     [project] = client.projects
     assert project["reference_dataset_id"] == synced.id
@@ -401,16 +401,18 @@ def test_an_experiment_turn_goes_unmasked_to_its_project_only(index, traced):
         tracing_tests.FAKE_LANGSMITH_KEY, session=session, batch=False
     )
     example = uuid.uuid4()
-    experiment = experiments.Experiment(client, "fitcoach-eval-test", uuid.uuid4(), {"q1": example})
+    experiment = experiments.Experiment(
+        client, "fitkompass-eval-test", uuid.uuid4(), {"q1": example}
+    )
     run_trace = experiment.trace("q1")
     result = _turn(index, run_trace)
     assert result.kind == "answer"
     runs = session.runs()
     [root] = [run for run in runs if run.get("id") == str(run_trace.run_id)][:1]
-    assert root["session_name"] == "fitcoach-eval-test"
+    assert root["session_name"] == "fitkompass-eval-test"
     assert root["reference_example_id"] == str(example)
     assert all(
-        run.get("session_name", "fitcoach-eval-test") == "fitcoach-eval-test" for run in runs
+        run.get("session_name", "fitkompass-eval-test") == "fitkompass-eval-test" for run in runs
     )
     # Not masked: the evaluation's own question and answer can be read.
     assert "CANARY-Q" in json.dumps(runs) and "CANARY-A" in json.dumps(runs)

@@ -36,7 +36,7 @@ CAPTURE_ROOT = ROOT / "data" / "capture"
 FONTS = ROOT / "assets" / "fonts"
 FONT = FONTS / "DejaVuSans.ttf"
 FONT_BOLD = FONTS / "DejaVuSans-Bold.ttf"
-VIDEO_NAME = "fitcoach-demo.mp4"
+VIDEO_NAME = "fitkompass-demo.mp4"
 # The screenshots `capture_media.py --video` writes (a name plus .png), and its chat frames.
 FRAMES = "chat-frames"
 SHOTS = frozenset(

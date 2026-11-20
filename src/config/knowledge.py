@@ -157,8 +157,7 @@ BASIS_TOOL_STATUSES = frozenset({"ok", "found", "not_found", "profile_needed"})
 # (copyright policy rule 10); the PMC, Europe PMC and publisher websites are never scripted.
 EUROPE_PMC_FULLTEXT_URL = "https://www.ebi.ac.uk/europepmc/webservices/rest/{pmcid}/fullTextXML"
 DOWNLOAD_USER_AGENT = (
-    "fitcoach-ai-assistant/0.1 (study project; source download; "
-    "https://github.com/NMH1988/fitcoach-ai-assistant)"
+    "fitkompass/0.1 (study project; source download; https://github.com/NMH1988/fitkompass)"
 )
 # Wait between two requests, to be polite to the API.
 DOWNLOAD_PAUSE_SECONDS = 1.0

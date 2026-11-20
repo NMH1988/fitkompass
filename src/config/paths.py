@@ -38,7 +38,7 @@ EVAL_TRAINING_BASELINE_PATH = PROJECT_ROOT / "data" / "eval_baseline_training.js
 # The store of signed-in users' data (T9.6, D13): one SQLite file in a gitignored folder, local.
 # Not encrypted: anyone who can read the file reads the data (docs/SECURITY.md).
 STORE_DIR = PROJECT_ROOT / "data" / "store"
-STORE_PATH = STORE_DIR / "fitcoach.sqlite3"
+STORE_PATH = STORE_DIR / "fitkompass.sqlite3"
 # The weekly review workflow's checkpointer (T9.16, D12): a SqliteSaver file next to the store file
 # (so in the same gitignored folder, and next to the demo's temporary store in demo mode). It holds
 # a review's metrics, evidence and draft only while the run waits for the coach.

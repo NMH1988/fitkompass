@@ -107,7 +107,7 @@ def variants(items: Sequence[EvalItem]) -> list[tuple[EvalItem, bool]]:
 
 
 def dataset_name(path: Path) -> str:
-    """Return the dataset's name for a questions file, e.g. 'fitcoach-eval-eval_questions'."""
+    """Return the dataset's name for a questions file, e.g. 'fitkompass-eval-eval_questions'."""
     return f"{config.EVAL_DATASET_PREFIX}{path.stem}"
 
 
@@ -166,7 +166,7 @@ def sync_dataset(client: Client, path: Path, items: Sequence[EvalItem]) -> Synce
             dataset = client.create_dataset(
                 name,
                 description=(
-                    f"The owner's evaluation questions from {path.name} (Fitcoach AI Assistant, "
+                    f"The owner's evaluation questions from {path.name} (FitKompass, "
                     "T9.33): synthetic test data, no user's data."
                 ),
             )

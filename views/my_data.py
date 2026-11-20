@@ -18,7 +18,7 @@ from views.text import lang, t
 
 EXPORT_KEY = account.MY_DATA_EXPORT_KEY
 FAILED_KEY = "my_data_failed"
-EXPORT_FILE_NAME = "fitcoach-my-data.json"
+EXPORT_FILE_NAME = "fitkompass-my-data.json"
 URL_PATH = "my-data"
 _LISTS = {
     "profile_entries": records.list_profile_entries,

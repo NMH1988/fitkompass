@@ -122,7 +122,7 @@ def test_the_german_ui_has_the_german_header_tabs_and_sidebar(monkeypatch):
     at = _start(monkeypatch, "de")
     assert at.session_state[i18n.SESSION_KEY] == "de"
     # A name is not translated: the German header shows the English one (T9.22).
-    assert at.title[0].value == config.APP_TITLE == "Fitcoach AI Assistant"
+    assert at.title[0].value == config.APP_TITLE == "FitKompass"
     disclaimer = f"**Keine medizinische Beratung.** {i18n.t('app.disclaimer', 'de')}"
     assert disclaimer in [w.value for w in at.warning]
     assert [tab.label for tab in at.tabs] == [

@@ -10,11 +10,14 @@ from src.config.limits import (
     SEARCH_QUERY_MAX_CHARS,
 )
 
-APP_TITLE = "Fitcoach AI Assistant"
-# Names training principles beside nutrition (feature 26; T9.11a, wording approved by the owner).
+APP_TITLE = "FitKompass"
+# Says what the app is (a coaching workspace with an AI agent, T11.2) and still names training
+# principles beside nutrition (feature 26, T9.11a). It describes only what is built: the live
+# messages come with T11.3 and T11.4.
 APP_INTRO = (
-    "Evidence-based answers on nutrition and resistance training principles for adults who lift "
-    "weights, with the research behind them."
+    "A coaching workspace for coaches and the adults they train. Its AI agent answers from "
+    "research on nutrition and resistance training principles and drafts work, such as weekly "
+    "reports, that a person approves."
 )
 # Shown on every page state (docs/PRD.md, domain guardrails).
 DISCLAIMER = (
