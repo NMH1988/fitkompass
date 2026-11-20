@@ -102,6 +102,26 @@ NEW_NAMES = frozenset(
     {
         "MESSAGE_MAX_CHARS",  # T11.3
         "STORE_CHECKPOINT_WAIT_SECONDS",  # T11.3
+        # T11.4a: the chat server's settings and its token secret.
+        "CHAT_SERVER_HOST",
+        "CHAT_SERVER_PORT",
+        "CHAT_SOCKET_PATH",
+        "CHAT_ALLOWED_ORIGINS",
+        "CHAT_TOKEN_TTL_SECONDS",
+        "CHAT_TOKEN_MAX_CHARS",
+        "CHAT_TOKEN_SKEW_SECONDS",
+        "CHAT_AUTH_WAIT_SECONDS",
+        "CHAT_CATCH_UP_LIMIT",
+        "CHAT_MAX_FRAME_BYTES",
+        "CHAT_CLOSE_REFUSED",
+        "CHAT_CLOSE_ERROR",
+        "CHAT_ERROR_NOT_SENT",
+        "CHAT_SECTION",
+        "CHAT_TOKEN_SECRET_NAME",
+        "CHAT_TOKEN_SECRET_ENV_NAME",
+        "CHAT_TOKEN_SECRET_MIN_CHARS",
+        "CHAT_TOKEN_SECRET_PLACEHOLDER",
+        "chat_token_secret",
     }
 )
 

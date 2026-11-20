@@ -11,6 +11,13 @@ requires-python = ">=3.14"
 # Pinned versions and licences are listed in docs/ARCHITECTURE.md section 12.
 dependencies = [
     "chromadb==1.5.9",
+    # The chat server (T11.4a, D24): FastAPI (MIT, the wheel's License-Expression, checked
+    # 2026-11-20) with one WebSocket, run by uvicorn (BSD-3-Clause, already pulled in by streamlit
+    # and chromadb, pinned on its own as src/realtime/ imports it). Every other package FastAPI
+    # needs (starlette, pydantic, anyio, typing-extensions, typing-inspection, annotated-doc,
+    # opentelemetry-api) was already installed; tests/test_dependency_licences.py checks them all.
+    "fastapi==0.165.0",
+    "uvicorn==0.54.0",
     "langchain==1.4.6",
     "langchain-chroma==1.1.0",
     "langchain-openai==1.7.2",

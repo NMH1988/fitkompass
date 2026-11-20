@@ -332,6 +332,23 @@ def test_without_the_app_s_setup_the_environment_flag_would_trace(langsmith_env_
     assert ls_utils.tracing_is_enabled() is True
 
 
+def test_turn_off_tracing_stops_tracing_that_was_on_and_langsmith_s_own_flag(
+    traced, langsmith_env_flag
+):
+    """The chat server's path (T11.4a): tracing on and LANGSMITH_TRACING set, then turned off."""
+    assert ls_utils.tracing_is_enabled()
+    tracing.turn_off_tracing()
+    assert not ls_utils.tracing_is_enabled()
+    assert tracing._installed["key_digest"] is None
+
+
+def test_turn_off_tracing_closes_the_demo_gate(demo_traced):
+    """The demo's unmasked gate is closed too, so no payload could pass unmasked."""
+    assert tracing.demo_gate_open()
+    tracing.turn_off_tracing()
+    assert not tracing.demo_gate_open() and not ls_utils.tracing_is_enabled()
+
+
 # --- The mask (AC 2) ---------------------------------------------------------------------------
 
 
