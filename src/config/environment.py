@@ -49,6 +49,14 @@ COOKIE_SECRET_PLACEHOLDER = "replace-with-a-long-random-secret-for-the-cookie"
 # secrets.toml or the environment and there is no [auth] section. Off by default.
 DEMO_MODE_NAME = "DEMO_MODE"
 DEMO_MODE_ON_VALUES = frozenset({"1", "true", "yes", "on"})
+# The chat server's token secret (T11.4a, D24): it signs the tokens the page mints and the server
+# checks. In its own [chat] section (so Streamlit does not copy it into os.environ), or the
+# environment variable; read only by chat_token_secret(), never logged, shown or put in an error.
+CHAT_SECTION = "chat"
+CHAT_TOKEN_SECRET_NAME = "token_secret"
+CHAT_TOKEN_SECRET_ENV_NAME = "FITKOMPASS_CHAT_TOKEN_SECRET"
+CHAT_TOKEN_SECRET_MIN_CHARS = 32
+CHAT_TOKEN_SECRET_PLACEHOLDER = "replace-with-a-long-random-secret-for-chat-tokens"
 # The OpenRouter key (.claude/rules/security-privacy.md): read only by get_api_key().
 API_KEY_NAME = "OPENROUTER_API_KEY"
 # The USDA FoodData Central API key (T9.9): optional, read only by get_food_api_key().
@@ -134,6 +142,18 @@ def user_key_secret() -> str | None:
     value = section.get(USER_KEY_SECRET_NAME) if isinstance(section, Mapping) else None
     secret = value.strip() if isinstance(value, str) else ""
     if len(secret) < USER_KEY_SECRET_MIN_CHARS or secret == USER_KEY_SECRET_PLACEHOLDER:
+        return None
+    return secret
+
+
+def chat_token_secret() -> str | None:
+    """Return the chat token secret; None if missing, too short or the example's placeholder."""
+    # secrets.toml first, then the environment (T11.4b's launcher may hand it to both processes).
+    section = _secret(CHAT_SECTION)
+    value = section.get(CHAT_TOKEN_SECRET_NAME) if isinstance(section, Mapping) else None
+    secret = value.strip() if isinstance(value, str) else ""
+    secret = secret or os.environ.get(CHAT_TOKEN_SECRET_ENV_NAME, "").strip()
+    if len(secret) < CHAT_TOKEN_SECRET_MIN_CHARS or secret == CHAT_TOKEN_SECRET_PLACEHOLDER:
         return None
     return secret
 

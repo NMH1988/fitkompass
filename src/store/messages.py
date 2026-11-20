@@ -26,10 +26,10 @@ _INSERT = """
 INSERT INTO messages (relationship_id, sender_id, text, created_at) VALUES (?, ?, ?, ?)
 """
 # A thread's messages after a given ID, oldest first: the whole thread from 0, and only the ones a
-# page has not shown yet after a reconnect (T11.4a).
+# page has not shown yet after a reconnect (T11.4a), at most LIMIT of them (-1: no limit).
 _THREAD = """
 SELECT id, relationship_id, sender_id, text, created_at FROM messages
-WHERE relationship_id = ? AND id > ? ORDER BY id
+WHERE relationship_id = ? AND id > ? ORDER BY id LIMIT ?
 """
 
 
@@ -63,10 +63,17 @@ def send_message(conn: sqlite3.Connection, sender_id: str, relationship_id: int,
 
 
 def list_messages(
-    conn: sqlite3.Connection, reader_id: str, relationship_id: int, *, after_id: int = 0
+    conn: sqlite3.Connection,
+    reader_id: str,
+    relationship_id: int,
+    *,
+    after_id: int = 0,
+    limit: int | None = None,
 ) -> list[dict]:
-    """Return a thread's messages after `after_id`, oldest first, to one of its two sides."""
+    """Return a thread's messages after `after_id`, oldest first, at most `limit`, to a side."""
     after_id = values.whole_number(after_id, "after_id")
+    # The chat server's catch-up reads a bounded batch (config.CHAT_CATCH_UP_LIMIT, T11.4a).
+    bound = -1 if limit is None else values.whole_number(limit, "limit", minimum=1)
     with transaction(conn):
         _thread_side(conn, reader_id, relationship_id)
-        return [dict(row) for row in conn.execute(_THREAD, (relationship_id, after_id))]
+        return [dict(row) for row in conn.execute(_THREAD, (relationship_id, after_id, bound))]

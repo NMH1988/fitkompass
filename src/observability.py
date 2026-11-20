@@ -56,6 +56,14 @@ EVENTS = frozenset(
         # The chat's memory did not keep an answer that reads like an instruction (T10.1): the
         # turn's ID only; never the question, the answer or the pattern that matched.
         "memory_answer_dropped",
+        # The chat server (T11.4a): a socket accepted, refused or closed (its status and a fixed
+        # reason code), a message stored or refused (its status), and an error inside the server
+        # (its diagnostic); never the text, the token, the user, the thread or the client's address.
+        "chat_connection",
+        "chat_message",
+        "chat_error",
+        # The chat server's process started, or refused to start (a fixed reason code).
+        "chat_server",
         LOG_FAILED_EVENT,
     }
 )
@@ -183,3 +191,22 @@ def configure_logging(level: str | int | None = None, stream: IO[str] | None = N
     # Here because the page and every script call this first (T9.8): tracing is off unless the
     # app's flag and the LangSmith key are set, whatever LangSmith's own environment flag says.
     tracing.configure_tracing()
+
+
+def capture_library_logs(names: tuple[str, ...], level: int = logging.WARNING) -> None:
+    """Send these libraries' records, from `level` up, through the app's JSON handler only."""
+    # For the chat server (T11.4a): uvicorn's and asyncio's own lines could quote a client's
+    # address, a request line or an error's traceback. Through the JSON formatter each becomes a
+    # line with its level and logger name only (the event `unnamed_event`), never its text or
+    # arguments; propagate is off, so no other handler (Python's last resort) prints them. Call
+    # configure_logging() first.
+    app_logger = logging.getLogger(LOGGER_NAME)
+    handler = next((h for h in app_logger.handlers if getattr(h, "is_app_handler", False)), None)
+    if handler is None:
+        raise RuntimeError("configure_logging() must run before capture_library_logs()")
+    with _LOCK:
+        for name in names:
+            library = logging.getLogger(name)
+            library.handlers = [handler]
+            library.setLevel(level)
+            library.propagate = False

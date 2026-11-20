@@ -914,6 +914,29 @@ def test_a_read_after_an_id_returns_only_the_later_messages(store_conn, relation
     assert messages.list_messages(store_conn, world.COACH_A, thread, after_id=ids[2]) == []
 
 
+def test_a_read_with_a_limit_returns_the_oldest_later_messages_first(store_conn, relationships):
+    """limit bounds a batch (the chat server's catch-up, T11.4a); the next batch starts after it."""
+    thread = relationships[world.SHARED]
+    ids = [messages.send_message(store_conn, world.SHARED, thread, f"m{n}") for n in range(5)]
+    first = messages.list_messages(store_conn, world.COACH_A, thread, limit=2)
+    assert [m["id"] for m in first] == ids[:2]
+    rest = messages.list_messages(store_conn, world.COACH_A, thread, after_id=ids[1], limit=10)
+    assert [m["id"] for m in rest] == ids[2:]
+
+
+@pytest.mark.parametrize("bad", [0, -1, "2", True, 1.5])
+def test_limit_must_be_a_positive_whole_number(store_conn, relationships, bad):
+    """A bad limit is refused by name, before anything is read."""
+    with pytest.raises(values.StoreValueError, match="limit"):
+        messages.list_messages(store_conn, world.COACH_A, relationships[world.SHARED], limit=bad)
+
+
+def test_a_limit_never_lets_a_stranger_read(store_conn, relationships):
+    """With a limit, the side check still runs: a stranger gets NotFound."""
+    with pytest.raises(access.NotFound):
+        messages.list_messages(store_conn, world.COACH_B, relationships[world.SHARED], limit=1)
+
+
 @pytest.mark.parametrize("bad", [-1, "1", True, 1.5, None])
 def test_after_id_must_be_a_whole_number(store_conn, relationships, bad):
     """A bad after_id is refused by name, before anything is read."""
