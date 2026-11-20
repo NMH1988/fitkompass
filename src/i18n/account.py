@@ -75,16 +75,19 @@ EN: dict[str, str] = {
     "my_data.intro_gymer": (
         "Everything the app stores about you: your account and your records below; your coach "
         "relationships, sharing choices, the foods your coaches suggested to you, your questions "
-        "to the coach with the answers, your coach's reads of your data and your notification "
-        "read mark (when you last marked your notifications as read) are in the export."
+        "to the coach with the answers, your messages with your coaches (both sides' messages), "
+        "your coach's reads of your data and your notification read mark (when you last marked "
+        "your notifications as read) are in the export. Reading your messages is not recorded, "
+        "for you or your coach, so those reads are not in the export."
     ),
     "my_data.intro_coach": (
         "Everything the app stores about you: your account, the working preferences you saved in "
         "the chat, your clients, their reviews and the questions and answers under them once you "
-        "have some, and your notification read mark (when you last marked your notifications as "
+        "have some, your messages with your clients (both sides' messages, former clients' "
+        "too), and your notification read mark (when you last marked your notifications as "
         "read); they are in the export. The foods you suggest to a client are stored as the "
         "client's data: your export holds when you saved each list. Nothing else of your chats "
-        "is stored."
+        "with the AI is stored."
     ),
     "my_data.account": "**Account:** {name} · {role} · created {created}",
     "my_data.count": "{count} stored",
@@ -135,7 +138,8 @@ EN: dict[str, str] = {
     "my_data.download": "Download my data (JSON)",
     "my_data.delete_all": "Delete everything",
     "my_data.delete_all_note": (
-        "Deletes your account and every row about you, then signs you out. This cannot be undone."
+        "Deletes your account and every row about you, and every message thread you are a side "
+        "of, for both sides, then signs you out. This cannot be undone."
     ),
     "my_data.confirm_delete_all": "Yes, delete my account and all my data",
     "my_data.delete_all_button": "Delete everything",
@@ -198,8 +202,12 @@ EN: dict[str, str] = {
     "sharing.end_note": (
         "Your coach can then read none of your records (nutrition, training, body), but still sees "
         "your display name, the dates of the relationship and when you started or stopped sharing "
-        "something until one of you deletes their account. Your records stay yours, and you can "
-        "accept a new code later."
+        "something, and both of you can still read your messages with each other, though neither "
+        "can send new ones, until one of you deletes their account. None of your other records "
+        "stays visible to your coach. Their export holds your messages with each other, the "
+        "relationship's dates and sharing history, and a log, with no values, of what they read, "
+        "set or decided about you earlier; a copy they exported stays with them. Your records "
+        "stay yours, and you can accept a new code later."
     ),
     "sharing.confirm_end": "Yes, end the relationship with my coach",
     "sharing.end_button": "End the relationship",
@@ -291,18 +299,21 @@ DE: dict[str, str] = {
     "my_data.intro_gymer": (
         "Alles, was die App über Sie speichert: Ihr Konto und unten Ihre Einträge; Ihre "
         "Coach-Beziehungen, Ihre Freigaben, die Lebensmittel, die Ihre Coachs Ihnen vorgeschlagen "
-        "haben, Ihre Fragen an den Coach mit den Antworten, die "
-        "Zugriffe Ihres Coachs auf Ihre Daten und Ihre Lesemarkierung der Benachrichtigungen (wann "
-        "Sie sie zuletzt als gelesen markiert haben) stehen im Export."
+        "haben, Ihre Fragen an den Coach mit den Antworten, Ihre Nachrichten mit Ihren Coachs "
+        "(die beider Seiten), die Zugriffe Ihres Coachs auf Ihre Daten und Ihre Lesemarkierung "
+        "der Benachrichtigungen (wann Sie sie zuletzt als gelesen markiert haben) stehen im "
+        "Export. Das Lesen Ihrer Nachrichten wird nicht aufgezeichnet, weder bei Ihnen noch bei "
+        "Ihrem Coach, daher steht es nicht im Export."
     ),
     "my_data.intro_coach": (
         "Alles, was die App über Sie speichert: Ihr Konto, die Arbeitsvorlieben, die Sie im Chat "
         "gespeichert haben, Ihre Kunden, deren Auswertungen und die Fragen und Antworten darunter, "
-        "sobald Sie welche haben, und Ihre Lesemarkierung der Benachrichtigungen (wann Sie sie "
-        "zuletzt als gelesen markiert haben); sie stehen im Export. Die Lebensmittel, die Sie "
+        "sobald Sie welche haben, Ihre Nachrichten mit Ihren Kunden (die beider Seiten, auch mit "
+        "früheren Kunden) und Ihre Lesemarkierung der Benachrichtigungen (wann Sie sie zuletzt "
+        "als gelesen markiert haben); sie stehen im Export. Die Lebensmittel, die Sie "
         "einem Klienten vorschlagen, werden als Daten des Klienten gespeichert: Ihr Export "
-        "enthält, wann Sie jede Liste gespeichert haben. Sonst wird von Ihren Chats nichts "
-        "gespeichert."
+        "enthält, wann Sie jede Liste gespeichert haben. Sonst wird von Ihren Chats mit der KI "
+        "nichts gespeichert."
     ),
     "my_data.account": "**Konto:** {name} · {role} · angelegt am {created}",
     "my_data.count": "{count} gespeichert",
@@ -354,8 +365,9 @@ DE: dict[str, str] = {
     "my_data.download": "Meine Daten herunterladen (JSON)",
     "my_data.delete_all": "Alles löschen",
     "my_data.delete_all_note": (
-        "Löscht Ihr Konto und jede Zeile über Sie und meldet Sie dann ab. Das kann nicht "
-        "rückgängig gemacht werden."
+        "Löscht Ihr Konto, jede Zeile über Sie und jeden Nachrichtenverlauf, an dem Sie beteiligt "
+        "sind, für beide Seiten, und meldet Sie dann ab. Das kann nicht rückgängig gemacht "
+        "werden."
     ),
     "my_data.confirm_delete_all": "Ja, mein Konto und alle meine Daten löschen",
     "my_data.delete_all_button": "Alles löschen",
@@ -425,8 +437,13 @@ DE: dict[str, str] = {
     "sharing.end_note": (
         "Ihr Coach kann dann keine Ihrer Einträge (Ernährung, Training, Körper) mehr lesen, sieht "
         "aber weiterhin Ihren Anzeigenamen, Beginn und Ende der Verbindung sowie, wann Sie etwas "
-        "zu teilen begonnen oder aufgehört haben, bis einer von Ihnen sein Konto löscht. Ihre "
-        "Einträge bleiben Ihre, und Sie können später einen neuen Code annehmen."
+        "zu teilen begonnen oder aufgehört haben, und Sie beide können Ihre Nachrichten "
+        "miteinander weiter lesen, aber keine neuen senden, bis einer von Ihnen sein Konto "
+        "löscht. Keiner Ihrer anderen Einträge bleibt Ihrem Coach sichtbar. Sein Export enthält "
+        "Ihre Nachrichten miteinander, die Daten der Verbindung und den Verlauf Ihrer Freigaben "
+        "sowie ein Protokoll ohne Werte dessen, was er früher über Sie gelesen, festgelegt oder "
+        "entschieden hat; eine Kopie, die er exportiert hat, bleibt bei ihm. Ihre Einträge "
+        "bleiben Ihre, und Sie können später einen neuen Code annehmen."
     ),
     "sharing.confirm_end": "Ja, die Verbindung mit meinem Coach beenden",
     "sharing.end_button": "Verbindung beenden",

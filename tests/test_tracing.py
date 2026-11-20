@@ -522,6 +522,19 @@ def test_a_value_outside_its_key_s_rule_is_masked(key, value):
     assert tracing.mask({key: value}) == {key: config.TRACE_MASK}
 
 
+def test_a_stored_message_is_masked_whole(store_conn):
+    """A thread as the store returns it (T11.3) keeps neither its text nor the users' IDs."""
+    from src.store import messages, users
+
+    users.create_user(store_conn, "CANARY-COACH-ID", "coach", "Coach")
+    users.create_user(store_conn, "CANARY-GYM-ID", "gymer", "Gym")
+    thread = users.start_relationship(store_conn, "CANARY-COACH-ID", "CANARY-GYM-ID")
+    messages.send_message(store_conn, "CANARY-GYM-ID", thread, "CANARY-MESSAGE 82.4 this morning")
+    rows = messages.list_messages(store_conn, "CANARY-COACH-ID", thread)
+    masked = json.dumps(tracing.mask({"messages": rows, "text": rows[0]["text"]}))
+    assert "CANARY" not in masked and "82.4" not in masked
+
+
 def test_a_key_that_is_not_an_identifier_is_masked():
     """A key the model or a user could write (spaces, digits first) does not reach the trace."""
     masked = tracing.mask({"CANARY key 87.3": "x", "1st": "y", "ok_key": "z"})

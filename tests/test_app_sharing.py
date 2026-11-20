@@ -459,6 +459,38 @@ def test_the_page_says_what_the_coach_keeps_seeing_and_who_drafts_reviews(
 
 
 @pytest.mark.parametrize(
+    ("language", "thread_line", "nothing_else_line"),
+    [
+        (
+            "en",
+            "both of you can still read your messages with each other, though neither can send "
+            "new ones",
+            "None of your other records stays visible to your coach. Their export holds your "
+            "messages with each other, the relationship's dates and sharing history, and a log, "
+            "with no values, of what they read, set or decided about you earlier; a copy they "
+            "exported stays with them.",
+        ),
+        (
+            "de",
+            "Sie beide können Ihre Nachrichten miteinander weiter lesen, aber keine neuen senden",
+            "Keiner Ihrer anderen Einträge bleibt Ihrem Coach sichtbar. Sein Export enthält Ihre "
+            "Nachrichten miteinander, die Daten der Verbindung und den Verlauf Ihrer Freigaben "
+            "sowie ein Protokoll ohne Werte dessen, was er früher über Sie gelesen, festgelegt "
+            "oder entschieden hat; eine Kopie, die er exportiert hat, bleibt bei ihm.",
+        ),
+    ],
+)
+def test_the_end_note_says_the_thread_stays_read_only_and_nothing_else(
+    monkeypatch, connected_gymer, language, thread_line, nothing_else_line
+):
+    """The end note says both sides keep reading the thread, read-only, and no record (T11.3)."""
+    at = open_page(start(monkeypatch, user=signed_in(), language=language), navigation.SHARING)
+    page = page_text(at)
+    assert thread_line in page
+    assert nothing_else_line in page
+
+
+@pytest.mark.parametrize(
     ("language", "nutrition", "others"),
     [
         (

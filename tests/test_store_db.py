@@ -4,6 +4,10 @@ import os
 import re
 import sqlite3
 import stat
+import subprocess
+import sys
+import threading
+import time
 from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import get_args
@@ -11,7 +15,8 @@ from typing import get_args
 import pytest
 
 from src import config, profile
-from src.store import access, db, schema, values
+from src.store import access, db, my_data, schema, users, values
+from tests.store_world import no_threads
 
 ROOT = config.PROJECT_ROOT
 TABLES = {
@@ -35,6 +40,7 @@ TABLES = {
     "notification_reads",
     "food_suggestion_lists",
     "food_suggestion_items",
+    "messages",
 }
 NOW = "2026-10-27T10:00:00+00:00"
 DAY = "2026-10-27"
@@ -149,6 +155,12 @@ VALID_ROWS = {
         "food_name": "Oats",
         "grams": 80.0,
     },
+    "messages": {
+        "relationship_id": 1,
+        "sender_id": "g1",
+        "text": "Had oats this morning.",
+        "created_at": NOW,
+    },
 }
 NON_NEGATIVE = [
     ("profile_entries", "age"),
@@ -187,6 +199,7 @@ IMMUTABLE = [
     "notification_reads",
     "food_suggestion_lists",
     "food_suggestion_items",
+    "messages",
 ]
 
 
@@ -228,7 +241,7 @@ def test_connect_creates_the_file_in_the_configured_folder_with_every_table(stor
         for row in store_conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
     }
     assert names == TABLES
-    assert db.schema_version(store_conn) == len(schema.MIGRATIONS) == 7
+    assert db.schema_version(store_conn) == len(schema.MIGRATIONS) == 8
 
 
 def test_the_store_folder_is_gitignored_and_inside_the_project():
@@ -466,7 +479,7 @@ def _time_columns(conn):
 def test_every_timestamp_column_refuses_a_time_that_is_not_utc(store_conn):
     """A local time, or one with another offset, is refused in every *_at column (D21)."""
     columns = _time_columns(store_conn)
-    assert len(columns) == 19  # food_suggestion_lists.created_at since T9.34
+    assert len(columns) == 20  # messages.created_at since T11.3
     _seed(store_conn)
     for table, column in columns:
         for bad in ("2026-10-27T10:00:00", "2026-10-27T10:00:00+01:00", "27.10.2026 10:00"):
@@ -624,6 +637,320 @@ def test_the_connection_is_closed_after_the_block(tmp_path):
         conn.execute("SELECT 1")
 
 
+# --- Messages (T11.3, migration 8) ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize("bad", ["", "   "])
+def test_a_message_needs_some_text(store_conn, bad):
+    """The table refuses an empty or blank message, as the code does before it."""
+    _seed(store_conn)
+    with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
+        _insert(store_conn, "messages", {**VALID_ROWS["messages"], "text": bad})
+
+
+@pytest.mark.parametrize(("column", "missing"), [("relationship_id", 99), ("sender_id", "nobody")])
+def test_a_message_refers_to_a_relationship_and_a_user(store_conn, column, missing):
+    """Both references are foreign keys, so a message cannot point at nothing."""
+    _seed(store_conn)
+    with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
+        _insert(store_conn, "messages", {**VALID_ROWS["messages"], column: missing})
+
+
+def test_upgrading_a_version_7_file_adds_the_messages_table_and_keeps_the_rows(tmp_path):
+    """A version 7 file gets migration 8: an empty messages table, every audit row kept."""
+    path = tmp_path / "old.sqlite3"
+    audit_rows = _old_file(path, 7)
+    with db.connect(path) as conn:
+        assert db.schema_version(conn) == len(schema.MIGRATIONS) == 8
+        assert conn.execute("SELECT count(*) FROM messages").fetchone()[0] == 0
+        assert [tuple(row) for row in conn.execute("SELECT * FROM audit_log ORDER BY id")] == (
+            audit_rows
+        )
+
+
+def test_a_migration_8_that_fails_halfway_leaves_the_version_7_file_as_it_was(tmp_path):
+    """A failure after migration 8 made its table undoes it: version 7, no messages table."""
+    path = tmp_path / "old.sqlite3"
+    _old_file(path, 7)
+    raw = sqlite3.connect(path, autocommit=True)
+    # A trigger already named as migration 8's makes its CREATE TRIGGER fail after the table.
+    raw.execute("CREATE TRIGGER messages_never_changed BEFORE DELETE ON users BEGIN SELECT 1; END")
+    raw.close()
+    with pytest.raises(sqlite3.OperationalError, match="messages_never_changed"):
+        with db.connect(path):
+            pass
+    raw = sqlite3.connect(path)
+    try:
+        assert raw.execute("PRAGMA user_version").fetchone()[0] == 7
+        names = {row[0] for row in raw.execute("SELECT name FROM sqlite_master")}
+        assert "messages" not in names
+    finally:
+        raw.close()
+
+
+# --- A second process: write-ahead log mode and the busy timeout (T11.3, D24) ---------------------
+
+# Writes one gymer through the store from another process, as the chat server will (D24).
+_CHILD_WRITE = """
+import sys
+from pathlib import Path
+from src.store import db, users
+with db.connect(Path(sys.argv[1])) as conn:
+    users.create_user(conn, "gym-child", "gymer", "Child Process")
+"""
+
+
+def _user_ids(conn) -> list[str]:
+    """Return every account's ID in the store, in order."""
+    return [row["id"] for row in conn.execute("SELECT id FROM users ORDER BY id")]
+
+
+def test_the_store_is_in_write_ahead_log_mode(tmp_path):
+    """A new store file is in WAL mode, and stays so when it is opened again."""
+    path = tmp_path / "s.sqlite3"
+    for _ in range(2):
+        with db.connect(path) as conn:
+            assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+
+
+def test_an_existing_store_is_moved_to_wal_with_its_data_kept(tmp_path):
+    """A file written in the old rollback-journal mode is switched on connect; nothing is lost."""
+    path = tmp_path / "s.sqlite3"
+    audit_rows = _old_file(path, len(schema.MIGRATIONS))
+    plain = sqlite3.connect(path)
+    assert plain.execute("PRAGMA journal_mode").fetchone()[0] == "delete"
+    plain.close()
+    with db.connect(path) as conn:
+        assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+        assert [tuple(row) for row in conn.execute("SELECT * FROM audit_log ORDER BY id")] == (
+            audit_rows
+        )
+
+
+def test_a_read_in_progress_does_not_block_a_write_on_another_connection(tmp_path, monkeypatch):
+    """One connection inside a read does not stop another from committing a write."""
+    monkeypatch.setattr(config, "STORE_BUSY_TIMEOUT_SECONDS", 0.2)
+    path = tmp_path / "s.sqlite3"
+    with db.connect(path) as reader, db.connect(path) as writer:
+        reader.execute("BEGIN")
+        assert _user_ids(reader) == []
+        users.create_user(writer, "gym-new", "gymer", "Gym New")  # would time out without WAL
+        assert _user_ids(reader) == []  # the read keeps its snapshot
+        reader.execute("COMMIT")
+        assert _user_ids(reader) == ["gym-new"]
+
+
+def test_a_second_writer_waits_for_the_first_instead_of_failing(tmp_path):
+    """Two writers take turns: the second waits within the busy timeout and then commits."""
+    path = tmp_path / "s.sqlite3"
+    errors: list[BaseException] = []
+    started = threading.Event()
+
+    def second_writer() -> None:
+        """Write one account on a connection of the thread's own, keeping any error."""
+        started.set()
+        try:
+            # connect() migrates in a write transaction, so the wait may start there already.
+            with db.connect(path) as conn:
+                users.create_user(conn, "gym-second", "gymer", "Gym Second")
+        except BaseException as error:  # reported by the assert below
+            errors.append(error)
+
+    with db.connect(path) as first:
+        with db.transaction(first):
+            first.execute(
+                "INSERT INTO users (id, role, display_name, created_at) VALUES (?, ?, ?, ?)",
+                ("gym-first", "gymer", "Gym First", NOW),
+            )
+            thread = threading.Thread(target=second_writer)
+            thread.start()
+            assert started.wait(5)
+            thread.join(0.5)
+            assert thread.is_alive()  # waiting for the first writer's lock
+        thread.join(10)
+        assert errors == [] and not thread.is_alive()
+        assert _user_ids(first) == ["gym-first", "gym-second"]
+
+
+def test_a_second_process_writes_while_the_app_holds_the_store_open(tmp_path):
+    """Another process (as the chat server will be) writes while this one is inside a read."""
+    path = tmp_path / "s.sqlite3"
+    with db.connect(path) as conn:
+        conn.execute("BEGIN")
+        assert _user_ids(conn) == []
+        done = subprocess.run(
+            [sys.executable, "-c", _CHILD_WRITE, str(path)],
+            cwd=ROOT,
+            capture_output=True,
+            timeout=60,
+            check=False,
+        )
+        assert done.returncode == 0, done.stderr.decode(errors="replace")
+        conn.execute("COMMIT")
+        assert _user_ids(conn) == ["gym-child"]
+
+
+def _lock_old_file(path: Path) -> sqlite3.Connection:
+    """Return a connection holding an exclusive lock on a rollback-journal store file."""
+    _old_file(path, len(schema.MIGRATIONS))
+    holder = sqlite3.connect(path, autocommit=True)
+    holder.execute("BEGIN EXCLUSIVE")
+    return holder
+
+
+def test_a_store_that_cannot_be_switched_to_wal_is_not_opened(tmp_path, monkeypatch):
+    """A file locked past the busy timeout during the switch closes the store, fail-safe."""
+    monkeypatch.setattr(config, "STORE_BUSY_TIMEOUT_SECONDS", 0.1)
+    path = tmp_path / "s.sqlite3"
+    holder = _lock_old_file(path)
+    try:
+        with pytest.raises(db.StoreError) as raised:
+            with db.connect(path):
+                pass
+    finally:
+        holder.close()
+    assert str(raised.value) == db._NO_WAL
+    assert raised.value.__context__ is None and raised.value.__cause__ is None
+
+
+def test_a_store_left_in_another_mode_is_not_opened(tmp_path, monkeypatch):
+    """A switch that leaves the file in another mode (no error) closes the store too."""
+    monkeypatch.setattr(db, "_WAL_ON", "PRAGMA journal_mode = DELETE")
+    with pytest.raises(db.StoreError, match="second process"):
+        with db.connect(tmp_path / "s.sqlite3"):
+            pass
+
+
+def test_a_checkpoint_empties_the_write_ahead_log(tmp_path):
+    """checkpoint() moves the log into the file and leaves the -wal file empty."""
+    path = tmp_path / "s.sqlite3"
+    with db.connect(path) as conn:
+        users.create_user(conn, "gym-new", "gymer", "CANARY-IN-THE-LOG")
+        wal = Path(f"{path}-wal")
+        assert wal.stat().st_size > 0
+        assert db.checkpoint(conn) is True
+        assert wal.stat().st_size == 0
+        assert b"CANARY-IN-THE-LOG" in path.read_bytes()
+
+
+def _logged_warnings(monkeypatch) -> list[tuple]:
+    """Record the store's warnings as (event, extra) instead of writing them."""
+    seen: list[tuple] = []
+    monkeypatch.setattr(db.logger, "warning", lambda event, extra=None: seen.append((event, extra)))
+    return seen
+
+
+def test_a_checkpoint_a_reader_holds_up_is_logged_and_finished_later(tmp_path, monkeypatch):
+    """A delete during another connection's read leaves the log; a later checkpoint empties it."""
+    seen = _logged_warnings(monkeypatch)
+    path = tmp_path / "s.sqlite3"
+    wal = Path(f"{path}-wal")
+    with db.connect(path) as conn, db.connect(path) as reader:
+        users.create_user(conn, "gym-gone", "gymer", "CANARY-DELETED-NAME")
+        reader.execute("BEGIN")
+        _user_ids(reader)  # holds a snapshot that still has the row
+        started = time.monotonic()
+        my_data.delete_user_data(conn, "gym-gone", no_threads)  # commits, then cannot finish
+        # The checkpoint answers busy after its short wait instead of waiting out the busy timeout
+        # while it holds the write lock, so another connection writes straight after.
+        assert time.monotonic() - started < config.STORE_BUSY_TIMEOUT_SECONDS / 2
+        assert seen == [("store_checkpoint", {"status": "busy"})]
+        with db.connect(path) as other:
+            other.execute("BEGIN IMMEDIATE")
+            other.execute("ROLLBACK")
+        assert b"CANARY-DELETED-NAME" in wal.read_bytes()  # the limit this records
+        reader.execute("COMMIT")
+        assert db.checkpoint(conn) is True
+        assert wal.stat().st_size == 0
+        assert b"CANARY-DELETED-NAME" not in path.read_bytes()
+        assert _user_ids(conn) == []
+
+
+def _hold_write_lock(path: Path, seconds: float) -> threading.Thread:
+    """Start a thread that holds a store transaction's write lock for some seconds."""
+    held = threading.Event()
+
+    def hold() -> None:
+        """Take the write lock on a connection of the thread's own, then let it go."""
+        with db.connect(path) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            held.set()
+            time.sleep(seconds)
+            conn.execute("COMMIT")
+
+    thread = threading.Thread(target=hold)
+    thread.start()
+    assert held.wait(10)
+    return thread
+
+
+def test_a_checkpoint_waits_out_a_short_store_call(tmp_path, monkeypatch):
+    """Another connection's store call shorter than the wait does not stop the checkpoint."""
+    seen = _logged_warnings(monkeypatch)
+    path = tmp_path / "s.sqlite3"
+    with db.connect(path) as conn:
+        users.create_user(conn, "gym-new", "gymer", "Gym New")
+        thread = _hold_write_lock(path, config.STORE_CHECKPOINT_WAIT_SECONDS / 5)
+        assert db.checkpoint(conn) is True
+        thread.join(10)
+        assert seen == []
+
+
+def test_a_checkpoint_gives_up_soon_on_a_long_store_call(tmp_path, monkeypatch):
+    """A store call longer than the wait makes it answer busy after the short wait, not 5 s."""
+    seen = _logged_warnings(monkeypatch)
+    path = tmp_path / "s.sqlite3"
+    with db.connect(path) as conn:
+        users.create_user(conn, "gym-new", "gymer", "Gym New")
+        thread = _hold_write_lock(path, config.STORE_CHECKPOINT_WAIT_SECONDS * 6)
+        started = time.monotonic()
+        assert db.checkpoint(conn) is False
+        assert time.monotonic() - started < config.STORE_CHECKPOINT_WAIT_SECONDS * 4
+        thread.join(10)
+        assert seen == [("store_checkpoint", {"status": "busy"})]
+        assert db.checkpoint(conn) is True  # once the call ended
+
+
+def test_a_checkpoint_never_creates_a_store_file(tmp_path, monkeypatch):
+    """A file gone from its path while open is reported as an error, never opened again."""
+    seen = _logged_warnings(monkeypatch)
+    opened: list[object] = []
+    with db.connect(tmp_path / "s.sqlite3") as conn:
+        monkeypatch.setattr(db.Path, "is_file", lambda self: False)
+        monkeypatch.setattr(db.sqlite3, "connect", opened.append)
+        assert db.checkpoint(conn) is False
+    assert opened == []
+    assert seen == [("store_checkpoint", {"status": "error"})]
+
+
+def test_a_checkpoint_that_fails_is_logged_and_does_not_raise(tmp_path, monkeypatch):
+    """An error in the checkpoint after a committed delete is logged by status, never raised."""
+    seen = _logged_warnings(monkeypatch)
+    monkeypatch.setattr(db, "_CHECKPOINT", "SELECT * FROM no_such_table")
+    path = tmp_path / "s.sqlite3"
+    with db.connect(path) as conn:
+        users.create_user(conn, "gym-gone", "gymer", "Gym Gone")
+        my_data.delete_user_data(conn, "gym-gone", no_threads)
+        assert _user_ids(conn) == []  # the delete stands
+    assert seen == [("store_checkpoint", {"status": "error"})]
+
+
+def test_every_connection_truncates_the_log_at_its_reset(tmp_path):
+    """journal_size_limit is 0, so a reset log is cut to its new pages, not left at its old size."""
+    with db.connect(tmp_path / "s.sqlite3") as conn:
+        assert conn.execute("PRAGMA journal_size_limit").fetchone()[0] == 0
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permissions; Windows uses profile ACLs")
+def test_the_log_and_shared_memory_files_are_owner_only_too(tmp_path):
+    """SQLite gives -wal and -shm the store file's 0600 while a connection has them open."""
+    path = tmp_path / "s.sqlite3"
+    with db.connect(path) as conn:
+        users.create_user(conn, "gym-new", "gymer", "Gym New")
+        for suffix in ("-wal", "-shm"):
+            assert stat.S_IMODE(Path(f"{path}{suffix}").stat().st_mode) == 0o600, suffix
+
+
 # --- values: what the store functions check before writing ----------------------------------------
 
 
@@ -705,8 +1032,11 @@ def test_an_error_after_sqlite_rolled_back_keeps_the_real_error(store_conn):
     assert not store_conn.in_transaction
 
 
-def test_a_failed_commit_leaves_no_open_transaction(tmp_path):
+def test_a_failed_commit_leaves_no_open_transaction(tmp_path, monkeypatch):
     """If COMMIT fails (here: a reader holds the file), the transaction is rolled back."""
+    # In WAL mode a reader never stops a commit, so this file stays in rollback-journal mode,
+    # where it does: transaction() must handle a failed COMMIT whatever the cause.
+    monkeypatch.setattr(db, "_use_wal", lambda conn: None)
     path = tmp_path / "s.sqlite3"
     with db.connect(path) as conn:
         _seed(conn)
@@ -836,13 +1166,13 @@ def test_the_audit_check_and_access_action_list_the_same_actions(store_conn):
     assert {"review_answered", "target_set", "suggestions_set"} <= set(get_args(access.Action))
 
 
-@pytest.mark.parametrize("migrations", [1, 2, 3, 4, 5, 6])
+@pytest.mark.parametrize("migrations", [1, 2, 3, 4, 5, 6, 7])
 def test_upgrading_an_older_file_keeps_every_audit_row_index_and_trigger(tmp_path, migrations):
-    """A version 1 to 6 file with audit rows reaches version 7, its rows, IDs and guards kept."""
+    """A version 1 to 7 file with audit rows reaches version 8, its rows, IDs and guards kept."""
     path = tmp_path / "old.sqlite3"
     before = _old_file(path, migrations)
     with db.connect(path) as conn:
-        assert db.schema_version(conn) == len(schema.MIGRATIONS) == 7
+        assert db.schema_version(conn) == len(schema.MIGRATIONS) == 8
         after = [tuple(row) for row in conn.execute("SELECT * FROM audit_log ORDER BY id")]
         assert after == before
         indexes = {

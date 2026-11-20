@@ -6,8 +6,16 @@ and an error rolls the whole of it back. Open a connection per unit of work with
 Streamlit runs each session in its own thread, and a connection is not shared between threads.
 Every transaction takes the write lock (`BEGIN IMMEDIATE`), reads included, so sessions use the
 file one at a time: fine for a local app, and it keeps a read and its audit row together.
+
+The file is in write-ahead log mode (WAL), so a second process (the chat server, D24) uses it next
+to Streamlit. As every store transaction takes the write lock, two of them still take turns (up to
+the busy timeout) in either mode; what WAL adds is that a commit never waits for a reader, so a
+statement run outside a transaction (a migration check, a role lookup, a long-lived connection's
+own read) never makes a write fail, and a reader never sees a write half done. WAL is a setting of
+the file, so the first connection of this version moves an existing store to it.
 """
 
+import logging
 import os
 import sqlite3
 from collections.abc import Iterator
@@ -17,17 +25,34 @@ from pathlib import Path
 from src import config
 from src.store.schema import MIGRATIONS
 
+logger = logging.getLogger(__name__)
+
 _FOREIGN_KEYS_ON = "PRAGMA foreign_keys = ON"
 # Deleted rows are overwritten with zeros instead of left in the file's free pages, so a deleted
 # entry cannot be read back from a copy of the file (docs/SECURITY.md).
 _SECURE_DELETE_ON = "PRAGMA secure_delete = ON"
 # Temporary tables and indices stay in memory, so no temporary file holds stored values
-# (the rollback journal of a write in progress still holds old pages).
+# (the write-ahead log still holds the pages written since its last checkpoint).
 _TEMP_STORE_MEMORY = "PRAGMA temp_store = MEMORY"
 # Owner-only permissions on POSIX, so other accounts on a shared computer cannot read the
 # store; Windows applies the user profile's access rules instead (docs/SECURITY.md).
 _PRIVATE_FOLDER = 0o700
 _PRIVATE_FILE = 0o600
+# A second process reads and writes the file (D24). The mode is kept in the file; the pragma
+# returns the mode in force, which stays the old one when the switch could not be made.
+_WAL_ON = "PRAGMA journal_mode = WAL"
+_WAL = "wal"
+# Copies the log's pages into the file and empties the log, so a deleted row's earlier copies
+# are no longer in the `-wal` file (docs/SECURITY.md). It returns (busy, log pages, pages copied);
+# busy is 1 when another connection's read kept it from finishing.
+_CHECKPOINT = "PRAGMA wal_checkpoint(TRUNCATE)"
+# When the log is reset after a completed checkpoint SQLite reuses it from the start and would
+# leave older pages behind the new ones; with a limit of 0 it truncates the file then, so a
+# deleted row's copies go once a later checkpoint completes (docs/SECURITY.md).
+_JOURNAL_SIZE_LIMIT = "PRAGMA journal_size_limit = 0"
+# The connection's file, so the checkpoint runs on a connection of its own (checkpoint()).
+_DATABASES = "PRAGMA database_list"
+_MAIN = "main"
 _SCHEMA_VERSION = "PRAGMA user_version"
 # IMMEDIATE takes the write lock at once, so two sessions migrating (or writing) at the same time
 # wait for each other (up to the busy timeout) instead of failing halfway.
@@ -38,6 +63,7 @@ _ROLLBACK = "ROLLBACK"
 
 # The one message for a store file that cannot be prepared: an OS error's text names the path.
 _CANNOT_PREPARE = "The data file's folder or permissions could not be set."
+_NO_WAL = "The data file could not be set up for a second process to use it."
 
 
 class StoreError(RuntimeError):
@@ -125,6 +151,56 @@ def prepare_file(target: Path, *, own_folder: bool) -> None:
         raise StoreError(_CANNOT_PREPARE)
 
 
+def _use_wal(conn: sqlite3.Connection) -> None:
+    """Put the file in write-ahead log mode, or raise StoreError so it is never used without it."""
+    # Fail closed: in its old mode a commit waits for every reader, so a long-lived read (the chat
+    # server's) could make Streamlit's writes fail with "database is locked". StoreError is raised
+    # outside the `except`, so the SQLite error is not even its __context__.
+    try:
+        mode = conn.execute(_WAL_ON).fetchone()[0]
+    except sqlite3.OperationalError:  # e.g. another connection held the file past the timeout
+        mode = None
+    if mode != _WAL:
+        raise StoreError(_NO_WAL)
+
+
+def _checkpoint_now(conn: sqlite3.Connection) -> int:
+    """Run the checkpoint on its own connection with a short wait; return SQLite's busy flag."""
+    # The checkpoint first takes the write lock (waiting for another store call, as each holds it)
+    # and then waits for readers while holding it. With the store's busy timeout every other store
+    # call would wait behind it for seconds; with a short wait it outlasts a short store call and
+    # answers busy soon when a read goes on.
+    file = next(row[2] for row in conn.execute(_DATABASES) if row[1] == _MAIN)
+    if not Path(file).is_file():
+        # Renamed or removed while open (POSIX): never create a new file outside prepare_file().
+        raise sqlite3.OperationalError("the store file is not where it was opened")
+    own = sqlite3.connect(file, timeout=config.STORE_CHECKPOINT_WAIT_SECONDS, autocommit=True)
+    try:
+        return own.execute(_CHECKPOINT).fetchone()[0]
+    finally:
+        own.close()
+
+
+def checkpoint(conn: sqlite3.Connection) -> bool:
+    """Copy the write-ahead log into the file and empty it; False if it could not finish."""
+    # Run after a delete has committed, so it never raises: the delete stands either way, and a
+    # failure here must not be shown as a failed delete. Another connection's transaction that
+    # outlasts the short wait (a read, or any store call, as each takes the write lock; in this
+    # process or the chat server's) keeps it from finishing; the deleted rows' copies then stay in
+    # the log until a later checkpoint completes (the next delete's, SQLite's automatic one after
+    # about 1000 pages, or the last connection's close). A fixed event with a status, never the
+    # error's text (docs/SECURITY.md).
+    try:
+        busy = _checkpoint_now(conn)
+    except sqlite3.Error:
+        logger.warning("store_checkpoint", extra={"status": "error"})
+        return False
+    if busy:
+        logger.warning("store_checkpoint", extra={"status": "busy"})
+        return False
+    return True
+
+
 @contextmanager
 def connect(path: Path | None = None) -> Iterator[sqlite3.Connection]:
     """Open the store (config.STORE_PATH by default), migrate it, and close it after the block."""
@@ -137,6 +213,8 @@ def connect(path: Path | None = None) -> Iterator[sqlite3.Connection]:
         conn.execute(_FOREIGN_KEYS_ON)
         conn.execute(_SECURE_DELETE_ON)
         conn.execute(_TEMP_STORE_MEMORY)
+        conn.execute(_JOURNAL_SIZE_LIMIT)
+        _use_wal(conn)  # outside a transaction, where SQLite allows the switch
         migrate(conn)
         yield conn
     finally:

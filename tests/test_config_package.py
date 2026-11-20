@@ -96,6 +96,14 @@ OLD_NAMES = frozenset(
     get_langsmith_api_key tracing_requested tracing_demo_unmasked
     """.split()
 )
+# The names added since the split, each with the ticket that added it: the package gives exactly
+# the old names and these.
+NEW_NAMES = frozenset(
+    {
+        "MESSAGE_MAX_CHARS",  # T11.3
+        "STORE_CHECKPOINT_WAIT_SECONDS",  # T11.3
+    }
+)
 
 
 def _defined(module_path: Path) -> list[str]:
@@ -117,10 +125,11 @@ def _config_modules() -> list[Path]:
 
 
 def test_the_package_defines_the_old_module_s_names_each_once():
-    """The modules define exactly the old names between them, none of them in two modules."""
+    """The modules define exactly the old and the added names, none of them in two modules."""
     defined = [name for path in _config_modules() for name in _defined(path)]
     assert len(defined) == len(set(defined)), sorted({n for n in defined if defined.count(n) > 1})
-    assert set(defined) == OLD_NAMES
+    assert not OLD_NAMES & NEW_NAMES
+    assert set(defined) == OLD_NAMES | NEW_NAMES
 
 
 def test_every_old_name_is_read_through_the_package_from_its_own_module():

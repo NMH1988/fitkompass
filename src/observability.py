@@ -37,6 +37,9 @@ EVENTS = frozenset(
         "tool_failed",
         # The store could not be opened or used (T9.5); its only field is the error's class name.
         "store_unavailable",
+        # The store's write-ahead log was not emptied after a delete (T11.3): busy (another
+        # connection was reading) or error; its only field is that status.
+        "store_checkpoint",
         # A gymer's invitation code was refused (T9.12); its only field is the reason.
         "invite_refused",
         # The coach's long-term memory (T9.7): a preference proposed, refused (the reason's code

@@ -164,6 +164,62 @@ def test_a_coach_sees_the_account_and_the_export(monkeypatch):
     assert json.loads(at.session_state["my_data_export"])["user"]["role"] == "coach"
 
 
+@pytest.mark.parametrize(
+    ("language", "stored", "not_audited"),
+    [
+        (
+            "en",
+            "your messages with your coaches (both sides' messages)",
+            "Reading your messages is not recorded, for you or your coach, so those reads are not "
+            "in the export.",
+        ),
+        (
+            "de",
+            "Ihre Nachrichten mit Ihren Coachs (die beider Seiten)",
+            "Das Lesen Ihrer Nachrichten wird nicht aufgezeichnet, weder bei Ihnen noch bei Ihrem "
+            "Coach, daher steht es nicht im Export.",
+        ),
+    ],
+)
+def test_a_gymer_s_intro_names_the_messages_and_their_unaudited_reads(
+    monkeypatch, gymer_with_records, language, stored, not_audited
+):
+    """The gymer is told the messages are stored and exported, and reading them is not (T11.3)."""
+    at = open_my_data(start(monkeypatch, user=signed_in(), language=language))
+    page = texts(at)
+    assert stored in page
+    assert not_audited in page
+
+
+@pytest.mark.parametrize(
+    ("language", "stored"),
+    [
+        ("en", "your messages with your clients (both sides' messages, former clients' too)"),
+        ("de", "Ihre Nachrichten mit Ihren Kunden (die beider Seiten, auch mit früheren Kunden)"),
+    ],
+)
+def test_a_coach_s_intro_names_the_messages(monkeypatch, language, stored):
+    """The coach is told their threads with clients are stored and exported (T11.3)."""
+    store_account("coach", name="Alex")
+    at = open_my_data(start(monkeypatch, user=signed_in(), language=language))
+    assert stored in texts(at)
+
+
+@pytest.mark.parametrize(
+    ("language", "both_sides"),
+    [
+        ("en", "every message thread you are a side of, for both sides"),
+        ("de", "jeden Nachrichtenverlauf, an dem Sie beteiligt sind, für beide Seiten"),
+    ],
+)
+def test_delete_everything_says_the_threads_go_for_both_sides(
+    monkeypatch, gymer_with_records, language, both_sides
+):
+    """The delete note says the other side's messages in a shared thread go too (T11.3)."""
+    at = open_my_data(start(monkeypatch, user=signed_in(), language=language))
+    assert both_sides in texts(at)
+
+
 def test_my_data_shows_the_fixed_message_when_the_store_fails_later(monkeypatch):
     """A store that fails after sign-in shows the fixed message, never the error's text."""
     store_account("gymer", profile=PROFILE)
