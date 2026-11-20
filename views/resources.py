@@ -52,7 +52,7 @@ def demo_store() -> Path:
     """Make the demo database once per app process, seeded with the synthetic users (T9.5, D18)."""
     # A temporary folder that lives as long as the process (the cache holds it); the real store in
     # data/store/ is never opened in demo mode.
-    folder = tempfile.TemporaryDirectory(prefix="fitcoach-demo-")
+    folder = tempfile.TemporaryDirectory(prefix="fitkompass-demo-")
     _DEMO_FOLDERS.append(folder)
     path = Path(folder.name) / "demo.sqlite3"
     with account.open_store(path) as conn:

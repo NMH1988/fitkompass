@@ -3,9 +3,9 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "fitcoach-ai-assistant"
+name = "fitkompass"
 version = "0.1.0"
-description = "RAG and tool-calling nutrition assistant for gym enthusiasts (Streamlit, LangChain, OpenRouter, Chroma)"
+description = "Coaching workspace for coaches and gymers with an AI agent: RAG, tool calling and drafts a person approves (Streamlit, LangChain, LangGraph, OpenRouter, Chroma)"
 readme = "README.md"
 requires-python = ">=3.14"
 # Pinned versions and licences are listed in docs/ARCHITECTURE.md section 12.

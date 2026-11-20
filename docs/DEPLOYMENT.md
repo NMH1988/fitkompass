@@ -53,21 +53,21 @@ For a reviewer or a clone with no Google client: set `DEMO_MODE = true` in `.str
 
 ## Tracing with LangSmith (T9.8, D19)
 
-Off unless `FITCOACH_TRACING` and `LANGSMITH_API_KEY` are both set (secrets or environment); LangSmith's own `LANGSMITH_TRACING` flag is ignored. The account is in the EU region (`config.LANGSMITH_ENDPOINT`; the owner creates it, O10). A trace holds metadata only, except in T9.35's demo mode below (`docs/SECURITY.md`, the LangSmith row). A public deployment leaves both unset until the owner has decided on LangSmith as a processor (a data processing agreement, the transfer to a US company even with EU storage) and the privacy notice names it.
+Off unless `FITKOMPASS_TRACING` and `LANGSMITH_API_KEY` are both set (secrets or environment); LangSmith's own `LANGSMITH_TRACING` flag is ignored. The account is in the EU region (`config.LANGSMITH_ENDPOINT`; the owner creates it, O10). A trace holds metadata only, except in T9.35's demo mode below (`docs/SECURITY.md`, the LangSmith row). A public deployment leaves both unset until the owner has decided on LangSmith as a processor (a data processing agreement, the transfer to a US company even with EU storage) and the privacy notice names it.
 
-`FITCOACH_TRACING_DEMO_UNMASKED` (T9.35) is for a local demo with made-up users only: it works only with `DEMO_MODE` and never with `[auth]`, and a public deployment never sets it.
+`FITKOMPASS_TRACING_DEMO_UNMASKED` (T9.35) is for a local demo with made-up users only: it works only with `DEMO_MODE` and never with `[auth]`, and a public deployment never sets it.
 
 ## Deploy steps (Streamlit Community Cloud, first time)
 
 1. Sign in at https://share.streamlit.io with the GitHub account that owns the repo.
-2. Create an app: repo `NMH1988/fitcoach-ai-assistant`, branch `main`, main file `app.py`.
+2. Create an app: repo `NMH1988/fitkompass`, branch `main`, main file `app.py`.
 3. In advanced settings: choose the Python version; paste secrets only if option 2 above is used.
 4. Deploy, open the URL, and run the checks below.
 5. Optional: set the repo variable `APP_URL` and add the Sprint 1 style CD workflow that waits for CI on `main` and then calls `<APP_URL>/_stcore/health`.
 
 ## Copying the repo to the course repository
 
-The work happens in `NMH1988/fitcoach-ai-assistant` (since 2026-10-26; it started in `NMH1988/nutrition-ai-assistant`, where the earlier `#<n>` numbers live); when it is finished, it is copied into the repository the course provides, where the reviewers read it. Only files and commit history travel; issues, pull requests, PR descriptions and review comments stay behind.
+The work happens in `NMH1988/fitkompass` (since 2026-11-19, the Capstone; before that in `NMH1988/fitcoach-ai-assistant` from 2026-10-26, and it started in `NMH1988/nutrition-ai-assistant`, where the earlier `#<n>` numbers live); when it is finished, it is copied into the repository the course provides, where the reviewers read it. Only files and commit history travel; issues, pull requests, PR descriptions and review comments stay behind.
 
 Before copying:
 1. `docs/IMPLEMENTATION_PLAN.md` (the order table) and `docs/tickets/` show every ticket's final status, and `docs/PROGRESS.md` lists an entry (a file in `docs/progress/`) for every merged PR.
@@ -94,7 +94,7 @@ Updating the course repository later (allowed before the deadline):
    git fetch origin
    git fetch course
    git switch --detach course/main
-   git merge origin/main -m "T<x.y> Update from NMH1988/fitcoach-ai-assistant"
+   git merge origin/main -m "T<x.y> Update from NMH1988/fitkompass"
    # Sprint 3 only: if the merge stops on a modify/delete conflict for .github/dependabot.yml
    # (this repo changed the file the course repo removed), keep it removed, then go on:
    #   git rm .github/dependabot.yml

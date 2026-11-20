@@ -24,9 +24,10 @@ EN: dict[str, str] = {
         "{reviews} peer-reviewed reviews ({licenses})."
     ),
     "about.scope": (
-        "The assistant explains nutrition and resistance training principles from these articles "
-        "and cites them. It does not write training programs or coach exercise technique, and it "
-        "does not replace a coach, a doctor or a physiotherapist."
+        f"{config.APP_TITLE} is a coaching workspace with an AI agent. In the chat, the agent "
+        "explains nutrition and resistance training principles from these articles and cites "
+        "them. It does not write training programs or coach exercise technique, and it does not "
+        "replace a coach, a doctor or a physiotherapist."
     ),
     "about.method": (
         "The model decides whether to search the research; a search is rephrased "
@@ -130,8 +131,9 @@ DE: dict[str, str] = {
     # A name is not translated: the German UI and PDF show the English one (T9.22).
     "app.title": config.APP_TITLE,
     "app.intro": (
-        "Evidenzbasierte Antworten zu Ernährung und Trainingsprinzipien für Erwachsene, die "
-        "Krafttraining machen, mit der Forschung dahinter."
+        "Ein Coaching-Arbeitsbereich für Coaches und die Erwachsenen, die sie trainieren. Sein "
+        "KI-Agent antwortet aus der Forschung zu Ernährung und Trainingsprinzipien und erstellt "
+        "Entwürfe, etwa Wochenberichte, die ein Mensch freigibt."
     ),
     "app.not_medical_advice": "Keine medizinische Beratung",
     "app.disclaimer": (
@@ -153,8 +155,9 @@ DE: dict[str, str] = {
         "{reviews} begutachtete Übersichtsarbeiten ({licenses})."
     ),
     "about.scope": (
-        "Der Assistent erklärt Grundsätze der Ernährung und des Krafttrainings aus diesen "
-        "Artikeln und zitiert sie. Er erstellt keine Trainingspläne, leitet keine Übungstechnik "
+        f"{config.APP_TITLE} ist ein Coaching-Arbeitsbereich mit einem KI-Agenten. Im Chat erklärt "
+        "der Agent Grundsätze der Ernährung und des Krafttrainings aus diesen Artikeln und "
+        "zitiert sie. Er erstellt keine Trainingspläne, leitet keine Übungstechnik "
         "an und ersetzt weder ein Coaching noch eine ärztliche oder physiotherapeutische "
         "Behandlung."
     ),

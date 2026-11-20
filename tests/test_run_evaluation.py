@@ -1121,10 +1121,10 @@ def test_langsmith_records_the_run_as_an_experiment_on_the_dataset(
     """The questions become a dataset, the run an experiment on it, each turn's checks feedback."""
     client, traces = langsmith_client
     assert run_evaluation.main(["--langsmith", _questions_file(tmp_path, [_item_dict()])]) == 0
-    assert list(client.datasets) == ["fitcoach-eval-questions"]
+    assert list(client.datasets) == ["fitkompass-eval-questions"]
     [project] = client.projects
-    assert project["name"].startswith("fitcoach-eval-")
-    assert project["reference_dataset_id"] == client.datasets["fitcoach-eval-questions"].id
+    assert project["name"].startswith("fitkompass-eval-")
+    assert project["reference_dataset_id"] == client.datasets["fitkompass-eval-questions"].id
     assert project["metadata"]["scored"] is False
     assert project["metadata"]["questions_file"] == "questions.json"
     assert project["metadata"]["answer_model"] == config.DEFAULT_ANSWER_MODEL
@@ -1143,7 +1143,7 @@ def test_langsmith_records_the_run_as_an_experiment_on_the_dataset(
     # The tracer's own wait flushes the client too; the experiment is then marked ended.
     assert client.flushed >= 1 and client.ended == [project["id"]]
     out = capsys.readouterr().out
-    assert "LangSmith dataset fitcoach-eval-questions: 1 added, 0 changed, 0 removed." in out
+    assert "LangSmith dataset fitkompass-eval-questions: 1 added, 0 changed, 0 removed." in out
     assert f"LangSmith experiment: {project['name']}" in out
     # The report and the results file are written as without --langsmith.
     _, document = _results_file(tmp_path)

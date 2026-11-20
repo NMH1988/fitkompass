@@ -79,7 +79,7 @@ def test_the_pdf_has_the_title_date_and_disclaimer():
     """The first page names the app, the day it was made and the full disclaimer."""
     text = pdf_text(_pdf())
     assert export_pdf.TEXT["title"] in text
-    assert "Fitcoach AI Assistant: session summary" in text
+    assert "FitKompass: session summary" in text
     assert "Created on 2026-10-20" in text
     assert f"Not medical advice. {config.DISCLAIMER}" in text
 
@@ -90,7 +90,7 @@ def test_every_page_has_the_disclaimer_in_its_footer():
     reader = PdfReader(io.BytesIO(_pdf(turns)))
     assert len(reader.pages) > 1
     for number, page in enumerate(reader.pages, start=1):
-        footer = f"Fitcoach AI Assistant · Not medical advice · Page {number}"
+        footer = f"FitKompass · Not medical advice · Page {number}"
         assert footer in page.extract_text()
 
 
@@ -839,7 +839,7 @@ def test_the_german_pdf_reads_back_its_german_headings():
     )
     for heading in (
         # A name is not translated (T9.22).
-        "Fitcoach AI Assistant: Zusammenfassung der Sitzung",
+        "FitKompass: Zusammenfassung der Sitzung",
         "Erstellt am 20.10.2026",
         f"Keine medizinische Beratung. {_de('app.disclaimer')}",
         "Ihr Profil",
@@ -866,7 +866,7 @@ def test_every_page_of_the_german_pdf_has_the_german_footer():
     reader = PdfReader(io.BytesIO(data))
     assert len(reader.pages) > 1
     for number, page in enumerate(reader.pages, start=1):
-        footer = f"Fitcoach AI Assistant · Keine medizinische Beratung · Seite {number}"
+        footer = f"FitKompass · Keine medizinische Beratung · Seite {number}"
         assert footer in page.extract_text()
 
 

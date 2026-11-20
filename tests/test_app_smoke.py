@@ -34,9 +34,9 @@ def test_app_renders_without_exception():
 
 
 def test_app_shows_title():
-    """The page title is the app's name, Fitcoach AI Assistant since T9.22."""
+    """The page title is the app's name, FitKompass since T11.2."""
     at = _run_app()
-    assert at.title[0].value == config.APP_TITLE == "Fitcoach AI Assistant"
+    assert at.title[0].value == config.APP_TITLE == "FitKompass"
 
 
 def test_app_shows_disclaimer():

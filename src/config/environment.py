@@ -17,16 +17,16 @@ LOG_LEVEL = "INFO"
 # is always ignored, as it would trace with no masking. The key follows the OpenRouter key's rules
 # (.claude/rules/security-privacy.md): read only by get_langsmith_api_key(), never logged or shown.
 LANGSMITH_API_KEY_NAME = "LANGSMITH_API_KEY"
-TRACING_FLAG_NAME = "FITCOACH_TRACING"
+TRACING_FLAG_NAME = "FITKOMPASS_TRACING"
 TRACING_ON_VALUES = frozenset({"1", "true", "yes", "on"})
 # The EU region: the LangSmith account is created there (O10, T9.8).
 LANGSMITH_ENDPOINT = "https://eu.api.smith.langchain.com"
-LANGSMITH_PROJECT = "fitcoach-ai-assistant"
+LANGSMITH_PROJECT = "fitkompass"
 # Unmasked traces in demo mode only (T9.35, to show a reviewer what a trace holds): on only with
 # tracing on, demo mode on (synthetic users, no [auth]) and this flag; the runs go to a project of
 # their own, which the owner deletes after the demo.
-TRACING_DEMO_UNMASKED_FLAG_NAME = "FITCOACH_TRACING_DEMO_UNMASKED"
-LANGSMITH_DEMO_PROJECT = "fitcoach-ai-assistant-demo"
+TRACING_DEMO_UNMASKED_FLAG_NAME = "FITKOMPASS_TRACING_DEMO_UNMASKED"
+LANGSMITH_DEMO_PROJECT = "fitkompass-demo"
 # What a masked value or key becomes in a trace.
 TRACE_MASK = "[masked]"
 TRACE_MASKED_KEY = "[masked key {number}]"
