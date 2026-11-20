@@ -2,11 +2,12 @@
 
 Tracing is off unless the app's flag (`config.TRACING_FLAG_NAME`) and the LangSmith key are both
 set. `configure_tracing()` sets LangSmith's global state once per run of the page or a script
-(`observability.configure_logging()` calls it): off, it turns tracing off for every LangChain and
-LangGraph run, so LangSmith's own `LANGSMITH_TRACING` flag in the environment, which would trace
-with no masking, is ignored; on, it installs one client whose anonymizer is `mask()`, so every
-tracer LangChain makes (the chat turn, the conversation, the weekly review, the evaluation run)
-sends through it. No caller passes a tracer of its own.
+(`observability.configure_logging()` calls it; the chat server's process, which runs no model,
+calls `turn_off_tracing()` instead, through `configure_logging(with_tracing=False)`): off, it
+turns tracing off for every LangChain and LangGraph run, so LangSmith's own `LANGSMITH_TRACING`
+flag in the environment, which would trace with no masking, is ignored; on, it installs one client
+whose anonymizer is `mask()`, so every tracer LangChain makes (the chat turn, the conversation, the
+weekly review, the evaluation run) sends through it. No caller passes a tracer of its own.
 
 LangSmith's client runs `mask()` on every run's inputs, outputs, metadata and error before it sends
 them. It keeps the shape where something is kept (keys that are plain identifiers, lists, dicts; a
@@ -355,19 +356,32 @@ def _extra_destinations() -> bool:
     return any(os.environ.get(name, "").strip() for name in _REPLICA_VARIABLES)
 
 
+def _turn_off() -> None:
+    """Turn tracing off and close the demo gate; the caller holds _LOCK."""
+    # Also turns off a tracer that LangSmith's own environment flag would start. The global client
+    # is never cleared: a Streamlit thread that turned tracing on keeps its own `enabled` until its
+    # next run, and with no global client LangSmith would build a default one that masks nothing.
+    # It keeps the masked one.
+    langsmith.configure(enabled=False)
+    _installed["key_digest"] = None
+    _gate["open"] = False
+
+
+def turn_off_tracing() -> None:
+    """Turn tracing off in this process, whatever the app's flag or LangSmith's own flag says."""
+    # For a process that runs no model and so has nothing to trace: the chat server (T11.4a).
+    # No client is installed, so a later change there cannot start tracing by accident.
+    with _LOCK:
+        _turn_off()
+
+
 def configure_tracing() -> bool:
     """Install the masked client (in demo mode with its flag, the demo one); else turn it off."""
     wanted = config.tracing_requested() and not _extra_destinations()
     key = config.get_langsmith_api_key() if wanted else None
     with _LOCK:
         if key is None:
-            # Also turns off a tracer that LangSmith's own environment flag would start. The
-            # global client is never cleared: a Streamlit thread that turned tracing on keeps its
-            # own `enabled` until its next run, and with no global client LangSmith would build a
-            # default one that masks nothing. It keeps the masked one.
-            langsmith.configure(enabled=False)
-            _installed["key_digest"] = None
-            _gate["open"] = False
+            _turn_off()
             return False
         demo = config.tracing_demo_unmasked()
         _gate["open"] = demo

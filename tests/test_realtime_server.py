@@ -21,7 +21,7 @@ import pytest
 from websockets.exceptions import ConnectionClosed, InvalidStatus
 from websockets.sync.client import connect
 
-from src import config, observability
+from src import config, observability, tracing
 from src.realtime import app as chat_app
 from src.realtime import server as chat_server
 from src.realtime import tokens
@@ -257,6 +257,25 @@ def no_run(monkeypatch):
 def _main_lines(capsys) -> list[dict]:
     """Return the JSON lines main() wrote to stderr."""
     return [json.loads(line) for line in capsys.readouterr().err.splitlines()]
+
+
+def test_main_never_sets_up_tracing_whatever_the_flags_say(
+    monkeypatch, secret, relationships, no_run, library_loggers_are_reset
+):
+    """Tracing, its key and the demo flag all on: tracing is turned off, no client installed."""
+    patch_config(monkeypatch, "tracing_requested", lambda: True)
+    patch_config(monkeypatch, "get_langsmith_api_key", lambda: "lsv2-test-not-a-real-key")
+    patch_config(monkeypatch, "tracing_demo_unmasked", lambda: True)
+    patch_config(monkeypatch, "demo_mode", lambda: True)
+
+    set_up, turned_off = [], []
+    real_set_up, real_turn_off = tracing.configure_tracing, tracing.turn_off_tracing
+    # Recorded, not refused: conftest's teardown calls configure_tracing() to reset the state.
+    monkeypatch.setattr(tracing, "configure_tracing", lambda: set_up.append(real_set_up()))
+    monkeypatch.setattr(tracing, "turn_off_tracing", lambda: turned_off.append(real_turn_off()))
+    assert chat_server.main(["--store", str(config.STORE_PATH)]) == 0
+    assert set_up == [] and turned_off == [None] and len(no_run) == 1
+    assert tracing._installed["key_digest"] is None and not tracing.demo_gate_open()
 
 
 def test_main_refuses_to_start_without_a_secret(

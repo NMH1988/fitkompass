@@ -170,7 +170,9 @@ class _JsonHandler(logging.StreamHandler):
 _LOCK = threading.Lock()
 
 
-def configure_logging(level: str | int | None = None, stream: IO[str] | None = None) -> None:
+def configure_logging(
+    level: str | int | None = None, stream: IO[str] | None = None, *, with_tracing: bool = True
+) -> None:
     """Send the app's log lines to stderr as JSON, and set up masked tracing or turn it off."""
     # No file handler: the lines go to the process's stderr and the host decides where they land.
     # `stream` is for tests. propagate is off, so a handler on the root logger cannot print the
@@ -189,8 +191,13 @@ def configure_logging(level: str | int | None = None, stream: IO[str] | None = N
         for name in _CHATTY_LIBRARIES:
             logging.getLogger(name).setLevel(logging.WARNING)
     # Here because the page and every script call this first (T9.8): tracing is off unless the
-    # app's flag and the LangSmith key are set, whatever LangSmith's own environment flag says.
-    tracing.configure_tracing()
+    # app's flag and the LangSmith key are set, whatever LangSmith's own environment flag says. A
+    # process that runs no model (the chat server, T11.4a) passes with_tracing=False: tracing is
+    # then off whatever the flags say, and no LangSmith client is installed in it.
+    if with_tracing:
+        tracing.configure_tracing()
+    else:
+        tracing.turn_off_tracing()
 
 
 def capture_library_logs(names: tuple[str, ...], level: int = logging.WARNING) -> None:

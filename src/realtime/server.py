@@ -4,9 +4,9 @@
 writes the same store file: `config.STORE_PATH` by default; in demo mode the store is a temporary
 file the Streamlit process makes, so `--store` must name it (T11.4b's launcher does), and the server
 refuses to start without it. It also refuses without the token secret or a store file that exists
-(it never creates one). uvicorn's access log is off; its own loggers, and asyncio's, write through
-the JSON formatter at WARNING only, so a handshake line with the client's address (INFO), a request
-line or a traceback never reaches stderr.
+(it never creates one). Tracing is off in its process (no model runs there). uvicorn's access log
+is off; its own loggers, and asyncio's, write through the JSON formatter at WARNING only, so a
+handshake line with the client's address (INFO), a request line or a traceback never reaches stderr.
 """
 
 import argparse
@@ -73,7 +73,9 @@ def _refuse(reason: str) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     """Start the chat server; return 2 without a secret, a store file, or --store in demo mode."""
-    observability.configure_logging()
+    # No tracing in this process: it runs no model, so there is nothing to trace, and with no
+    # LangSmith client installed a later change cannot start tracing here by accident.
+    observability.configure_logging(with_tracing=False)
     parser = argparse.ArgumentParser(prog="python -m src.realtime", description=__doc__)
     parser.add_argument("--store", type=Path, help="the store file (required in demo mode)")
     parser.add_argument("--port", type=int, default=None, help="the port on 127.0.0.1")
