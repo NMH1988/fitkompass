@@ -21,6 +21,7 @@ Keep the entry short and record what the code does not say. `tests/test_docs_lay
 
 ---
 
+- [2026-11-19 · Plan Epic 11: the owner's approved criteria and choices for T11.2-T11.13 · NMH1988/fitkompass#22 (closes NMH1988/fitkompass#21)](progress/2026-11-19-plan-epic-11-criteria.md)
 - [2026-11-19 · T11.1 Capstone plan: the brief, the PRD section, decisions D24-D29 and Epic 11 · NMH1988/fitkompass#7 (closes NMH1988/fitkompass#6)](progress/2026-11-19-T11.1.md)
 - [2026-11-19 · T10.9 Comments say why the code is as it is; the history stays in `docs/progress/` · NMH1988/fitcoach-ai-assistant#155 (closes NMH1988/fitcoach-ai-assistant#141)](progress/2026-11-19-T10.9.md)
 - [2026-11-19 · Plan T10.10: split `chat` into a package by concern · NMH1988/fitcoach-ai-assistant#154 (closes NMH1988/fitcoach-ai-assistant#153)](progress/2026-11-19-plan-T10.10.md)
