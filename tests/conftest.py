@@ -10,10 +10,27 @@ import streamlit as st
 from streamlit import config as st_config
 from streamlit.runtime.secrets import Secrets
 
-from src import chat, config, i18n, observability, tracing, usage
+from src import chat, config, i18n, metrics, observability, tracing, usage
 from src.store import db
 from src.tools import food_api
 from tests.fakes import TEST_COACH_PART, TEST_LANGUAGE_PARTS, patch_config
+
+
+@pytest.fixture(autouse=True)
+def one_berlin_day_per_test(monkeypatch):
+    """Pin "today in Berlin" for the whole test, so a test running across midnight sees one day."""
+    # Without it, a test that logs for today and then opens a page can straddle midnight in
+    # Europe/Berlin: the entry lands on one day and the page lists the next (CI failed so at
+    # 23:00 UTC on 2026-11-19). A given moment still converts as before; tests that pin their
+    # own day patch over this one.
+    real = metrics.berlin_day
+    today = real()
+
+    def berlin_day(moment=None):
+        """Return the pinned day for "now", and the real Berlin day of a given moment."""
+        return today if moment is None else real(moment)
+
+    monkeypatch.setattr(metrics, "berlin_day", berlin_day)
 
 
 @pytest.fixture
