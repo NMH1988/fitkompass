@@ -182,7 +182,7 @@ Deadline: **2026-11-02** (Sprint 2, already submitted by the owner, 2026-10-28).
 | [T10.10](tickets/T10.10.md) | NMH1988/fitcoach-ai-assistant#152 | Split `chat` into a package by concern, same behaviour | M | T10.9 (order only) | tbd (owner) | todo |
 | **Epic 11: Capstone (FitKompass)** | | | | | | |
 | [T11.1](tickets/T11.1.md) | NMH1988/fitkompass#6 | Capstone plan: the brief, the PRD section, decisions D24-D29 and Epic 11 | M | - | 11-20 | done |
-| [T11.2](tickets/T11.2.md) | NMH1988/fitkompass#8 | Rename the app to FitKompass | S | T11.1 | 11-21 | in review |
+| [T11.2](tickets/T11.2.md) | NMH1988/fitkompass#8 | Rename the app to FitKompass | S | T11.1 | 11-21 | done |
 | [T11.3](tickets/T11.3.md) | NMH1988/fitkompass#9 | Coach-client messages in the store | M | T11.2 (order only) | 11-23 | todo |
 | [T11.4](tickets/T11.4.md) | none | Real-time messages: the WebSocket server, the signed token and the browser component | L | T11.3 | - | dropped (split into T11.4a and T11.4b, owner's choice, 2026-11-19) |
 | [T11.4a](tickets/T11.4a.md) | NMH1988/fitkompass#10 | Real-time messages, part 1: the chat server and its signed token | M | T11.3 | 11-25 | todo |
