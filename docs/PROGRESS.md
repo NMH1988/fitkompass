@@ -21,6 +21,7 @@ Keep the entry short and record what the code does not say. `tests/test_docs_lay
 
 ---
 
+- [2026-11-23 · Plan: the coach's AI uses the client's thread (T11.6 rewritten, T11.14-T11.16) · PR to be opened (closes NMH1988/fitkompass#32)](progress/2026-11-23-plan-coach-ai-thread.md)
 - [2026-11-20 · T11.4a Records: status done after the merge · NMH1988/fitkompass#27 (closes NMH1988/fitkompass#26)](progress/2026-11-20-T11.4a-2.md)
 - [2026-11-20 · T11.4a Real-time messages, part 1: the chat server and its signed token · NMH1988/fitkompass#25 (closes NMH1988/fitkompass#10)](progress/2026-11-20-T11.4a.md)
 - [2026-11-20 · T11.3 Coach-client messages in the store · NMH1988/fitkompass#24 (closes NMH1988/fitkompass#9)](progress/2026-11-20-T11.3.md)
