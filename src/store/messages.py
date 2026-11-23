@@ -72,7 +72,7 @@ def list_messages(
 ) -> list[dict]:
     """Return a thread's messages after `after_id`, oldest first, at most `limit`, to a side."""
     after_id = values.whole_number(after_id, "after_id")
-    # The chat server's catch-up reads a bounded batch (config.CHAT_CATCH_UP_LIMIT, T11.4a).
+    # The chat socket's catch-up reads a bounded batch (config.CHAT_CATCH_UP_LIMIT, T11.4a).
     bound = -1 if limit is None else values.whole_number(limit, "limit", minimum=1)
     with transaction(conn):
         _thread_side(conn, reader_id, relationship_id)

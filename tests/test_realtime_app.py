@@ -1,4 +1,4 @@
-"""Tests for the chat server's app (T11.4a, D24): delivery, catch-up, refusals and renewal.
+"""Tests for the chat socket's app (T11.4a, D24): delivery, catch-up, refusals and renewal.
 
 FastAPI's TestClient runs the app in one event loop of its own, so two connections from one client
 share the server's hub, as two browsers on one uvicorn process do. The store is the test's own
@@ -19,7 +19,7 @@ from starlette.websockets import WebSocketDisconnect
 from src import config, observability
 from src.realtime import app as chat_app
 from src.realtime import tokens
-from src.store import messages, my_data, users
+from src.store import db, messages, my_data, users
 from src.store.access import NotFound
 from tests import store_world as world
 from tests.fakes import patch_config
@@ -51,10 +51,15 @@ def log_stream():
     return stream
 
 
+def _chat_app():
+    """Return the chat app on the test's store file, allowing the local page's origin."""
+    return chat_app.create_app(lambda: config.STORE_PATH, lambda: frozenset({ORIGIN}))
+
+
 @pytest.fixture
 def client(relationships, secret, log_stream):
     """Yield a TestClient on a chat app that uses the test's store file."""
-    with TestClient(chat_app.create_app(config.STORE_PATH)) as test_client:
+    with TestClient(_chat_app()) as test_client:
         yield test_client
 
 
@@ -581,6 +586,29 @@ def test_an_error_inside_the_handler_closes_with_the_fixed_code_and_logs_only_it
     assert CANARY not in log_stream.getvalue()
 
 
+@pytest.mark.parametrize("error", [sqlite3.OperationalError, db.StoreError])
+def test_a_store_failure_on_send_gives_not_sent_and_keeps_the_socket(
+    client, relationships, monkeypatch, log_stream, error
+):
+    """The store busy or unavailable: the fixed not_sent, the socket open, a chat_error line."""
+    thread = relationships[world.SHARED]
+
+    def failing(*args, **kwargs):
+        """Fail as the store does, with the canary in the error's message."""
+        raise error(f"database is locked {CANARY}")
+
+    real = messages.send_message
+    monkeypatch.setattr(messages, "send_message", failing)
+    with _open(client, world.SHARED, thread) as (gymer, _):
+        gymer.send_json({"type": "send", "text": CANARY})
+        assert gymer.receive_json() == {"type": "error", "code": config.CHAT_ERROR_NOT_SENT}
+        monkeypatch.setattr(messages, "send_message", real)
+        assert _probe(gymer, world.SHARED, thread, 0) == []  # still open, nothing was stored
+    lines = [json.loads(line) for line in log_stream.getvalue().splitlines()]
+    assert [line["event"] for line in lines].count("chat_error") == 1
+    assert CANARY not in log_stream.getvalue()
+
+
 def test_the_log_lines_hold_no_text_token_user_or_thread(client, relationships, log_stream):
     """Normal and refused traffic: every line is allowlisted JSON with no data of the chat."""
     thread = relationships[world.SHARED]
@@ -620,7 +648,7 @@ def test_the_log_lines_hold_no_text_token_user_or_thread(client, relationships, 
 def test_fastapi_s_telemetry_and_docs_are_off(relationships, secret, monkeypatch):
     """No OpenTelemetry spans, metrics or logs (even with its environment switch), no docs pages."""
     monkeypatch.setenv("FASTAPI_OTEL_AUTO_CONFIGURE", "true")
-    app = chat_app.create_app(config.STORE_PATH)
+    app = _chat_app()
     assert not app._native_telemetry.enabled()
     for name in ("tracing", "metrics", "logs", "operation_spans", "auto_configure"):
         assert app._telemetry[name] is False

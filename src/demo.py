@@ -4,8 +4,8 @@ A fixture we wrote ourselves: made-up names and numbers, no real person's data. 
 into a temporary database when the app starts (only with DEMO_MODE on and no [auth] section), so a
 reviewer can try the coach and gymer pages without a Google client. Later tickets add their own
 records here (an invitation); T9.13 added Sam's meals, T9.14 Sam's workouts, T9.27 a full
-week before this one, so a coach can draft a weekly review of a finished week on any day, and
-T11.7 the coach's meal plan for Sam.
+week before this one, so a coach can draft a weekly review of a finished week on any day, T11.4b
+a short conversation between the coach and Sam, and T11.7 the coach's meal plan for Sam.
 """
 
 import sqlite3
@@ -14,7 +14,7 @@ from datetime import timedelta
 
 from src import account, config, diary, meal_plans
 from src.profile import UserProfile
-from src.store import records, users
+from src.store import messages, records, users
 from src.tools import registry
 
 
@@ -94,6 +94,13 @@ DAY_PLANS = (
         ("dinner", "Cheese, cheddar", 40.0),
     ),
 )
+# A short made-up conversation between the coach and Sam (T11.4b), in the order it was sent: text
+# we wrote ourselves, so the Messages page has a thread to show.
+MESSAGES = (
+    (COACH.id, "Hi Sam, how did the squats feel this week?"),
+    (SHARING_GYMER.id, "Good! The last set at 100 kg was hard but clean."),
+    (COACH.id, "Great. Keep the weight next session and aim for the same form."),
+)
 # The coach's made-up meal plan for Sam (T11.7): the first day plan above, one template day of
 # about 2,500 kcal, above the calorie floor, so the gymer's Meal plan page and the coach's form on
 # Client week have a plan to show.
@@ -114,6 +121,8 @@ def seed(conn: sqlite3.Connection) -> None:
     relationship = users.start_relationship(conn, COACH.id, SHARING_GYMER.id)
     for scope in SHARED_SCOPES:
         users.set_consent(conn, SHARING_GYMER.id, relationship, scope, True)
+    for sender, text in MESSAGES:
+        messages.send_message(conn, sender, relationship, text)
     records.add_body_measurement(
         conn,
         SHARING_GYMER.id,

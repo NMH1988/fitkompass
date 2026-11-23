@@ -16,7 +16,8 @@ RATE_LIMIT_WINDOW_SECONDS = 60
 RATE_LIMIT_PER_SESSION = 50
 
 # The store of signed-in users' data (T9.6, D13; the file is STORE_PATH). How long a write waits
-# for another session's or process's write (the chat server's, D24) to finish before it fails.
+# for another connection's write (another session's, or the chat socket's, D24) to finish before
+# it fails.
 STORE_BUSY_TIMEOUT_SECONDS = 5
 # How long the checkpoint after a delete (T11.3) waits for another connection's transaction: long
 # enough for a short store call to end, short enough that the write lock it holds while waiting for

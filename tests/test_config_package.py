@@ -102,11 +102,17 @@ NEW_NAMES = frozenset(
     {
         "MESSAGE_MAX_CHARS",  # T11.3
         "STORE_CHECKPOINT_WAIT_SECONDS",  # T11.3
-        # T11.4a: the chat server's settings and its token secret.
-        "CHAT_SERVER_HOST",
-        "CHAT_SERVER_PORT",
+        # T11.4a: the chat server's settings and its token secret; T11.4b mounts it on Streamlit's
+        # server (the mount path, the local hosts and public origins, the renewal, the reconnect).
+        "CHAT_MOUNT_PATH",
         "CHAT_SOCKET_PATH",
-        "CHAT_ALLOWED_ORIGINS",
+        "CHAT_LOCAL_HOSTS",
+        "CHAT_PUBLIC_ORIGINS",
+        "CHAT_TOKEN_RENEW_BEFORE_SECONDS",
+        "CHAT_RENEW_RETRY_SECONDS",
+        "CHAT_RECONNECT_FIRST_SECONDS",
+        "CHAT_RECONNECT_MAX_SECONDS",
+        "CHAT_RECONNECT_MAX_REFUSALS",
         "CHAT_TOKEN_TTL_SECONDS",
         "CHAT_TOKEN_MAX_CHARS",
         "CHAT_TOKEN_SKEW_SECONDS",

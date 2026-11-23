@@ -96,6 +96,7 @@ EN: dict[str, str] = {
     # Pages, the account block, the welcome page and My data (T9.5).
     "page.chat": "Chat",
     "page.my_data": "My data",
+    "page.messages": "Messages",
     "page.notifications": "Notifications",
     "page.profile": "My profile",
     "page.today": "Today",
@@ -232,6 +233,7 @@ DE: dict[str, str] = {
     # Seiten, Kontobereich, Willkommensseite und Meine Daten (T9.5).
     "page.chat": "Chat",
     "page.my_data": "Meine Daten",
+    "page.messages": "Nachrichten",
     "page.notifications": "Benachrichtigungen",
     "page.profile": "Mein Profil",
     "page.today": "Heute",

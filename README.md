@@ -167,7 +167,7 @@ Stop the app before rebuilding the index and start it again afterwards.
 Then:
 
 ```bash
-streamlit run app.py      # start the app
+streamlit run serve.py    # start the app with real-time messages (or: streamlit run app.py, without them)
 python -m pytest -q       # run the tests (no key needed; all API calls are mocked)
 ruff check .              # lint
 ruff format --check .     # format check
@@ -180,6 +180,10 @@ The app runs locally only for now; a public deployment needs one of the options 
 - **Sign in with Google:** create a Google OAuth client for `http://localhost:8501/oauth2callback` in Testing mode, add the accounts that may sign in as test users, then fill the `[auth]` and `[account]` sections of `.streamlit/secrets.toml` (commented out in the example). Step by step: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md), "Sign-in with Google on localhost". The app then opens on a start page with only "Sign in with Google" (no guest once sign-in is set up; a copy without it opens as a guest). At the first sign-in you choose Coach or Gymer (once) and a display name; a gymer's details are saved when they press Save (the first time after ticking that they understand they are stored), and My data shows, exports or deletes them.
 - **Demo mode:** with no `[auth]` section, set `DEMO_MODE = true` in `.streamlit/secrets.toml` (or `DEMO_MODE=1` in the environment). The start page offers a "Demo user" picker with a coach and two gymers, all made up (no guest), on a temporary database that is deleted when the app stops.
 - **Neither:** the app runs for guests; nothing is stored.
+
+### Real-time messages (optional)
+
+A coach and a client write to each other on the Messages page. To send and receive without a reload, start the app with `streamlit run serve.py` instead of `streamlit run app.py` (the same pages, with the chat socket on the same port) and set `[chat] token_secret` in `.streamlit/secrets.toml` to a long random value (commented out in the example; e.g. `python -c "import secrets; print(secrets.token_hex(32))"`). Open the app at `http://localhost:8501` (or the port Streamlit prints): the socket accepts only the page's own local address. Without the socket or the secret, the Messages page shows the stored conversation read-only and says why. Messages are stored in the app's data file, read by both sides (also after the relationship ends) and never sent to the AI.
 
 ### Tracing with LangSmith (optional)
 

@@ -929,7 +929,7 @@ def test_a_read_after_an_id_returns_only_the_later_messages(store_conn, relation
 
 
 def test_a_read_with_a_limit_returns_the_oldest_later_messages_first(store_conn, relationships):
-    """limit bounds a batch (the chat server's catch-up, T11.4a); the next batch starts after it."""
+    """limit bounds a batch (the chat socket's catch-up, T11.4a); the next batch starts after it."""
     thread = relationships[world.SHARED]
     ids = [messages.send_message(store_conn, world.SHARED, thread, f"m{n}") for n in range(5)]
     first = messages.list_messages(store_conn, world.COACH_A, thread, limit=2)

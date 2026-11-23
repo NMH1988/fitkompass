@@ -11,11 +11,14 @@ requires-python = ">=3.14"
 # Pinned versions and licences are listed in docs/ARCHITECTURE.md section 12.
 dependencies = [
     "chromadb==1.5.9",
-    # The chat server (T11.4a, D24): FastAPI (MIT, the wheel's License-Expression, checked
-    # 2026-11-20) with one WebSocket, run by uvicorn (BSD-3-Clause, already pulled in by streamlit
-    # and chromadb, pinned on its own as src/realtime/ imports it). Every other package FastAPI
-    # needs (starlette, pydantic, anyio, typing-extensions, typing-inspection, annotated-doc,
-    # opentelemetry-api) was already installed; tests/test_dependency_licences.py checks them all.
+    # The chat socket (T11.4a, D24): FastAPI (MIT, the wheel's License-Expression, checked
+    # 2026-11-20) with one WebSocket, mounted on Streamlit's own server since T11.4b and run by
+    # uvicorn (BSD-3-Clause, already pulled in by streamlit and chromadb, pinned on its own as
+    # Streamlit's server and the socket's tests run it). Every other package FastAPI needs
+    # (starlette, pydantic, anyio, typing-extensions, typing-inspection, annotated-doc,
+    # opentelemetry-api) was already installed; src/realtime/server.py imports starlette's Mount
+    # directly, and starlette is not pinned on its own: it moves with FastAPI's and Streamlit's
+    # pins. tests/test_dependency_licences.py checks them all.
     "fastapi==0.165.0",
     "uvicorn==0.54.0",
     "langchain==1.4.6",

@@ -9,7 +9,7 @@ import pytest
 
 from src import account, config, demo, observability
 from src.profile import UserProfile
-from src.store import db, records, users
+from src.store import db, messages, records, users
 from src.store import meal_plans as store_meal_plans
 from src.store.access import NotFound
 
@@ -307,6 +307,17 @@ def test_the_demo_gymer_has_workouts(store_conn):
     assert all(len(session["sets"]) == 3 for session in sessions)
     assert len(sessions) >= len(demo.LAST_WEEK_WORKOUTS) + 1  # today's, and last week's (T9.27)
     assert records.list_workout_sessions(store_conn, kim, kim) == []
+
+
+def test_the_demo_coach_and_sam_have_a_short_conversation(store_conn):
+    """The thread holds the made-up messages in order (T11.4b); Kim has no thread."""
+    demo.seed(store_conn)
+    sam, kim, coach = demo.SHARING_GYMER.id, demo.OTHER_GYMER.id, demo.COACH.id
+    [thread] = users.list_relationships(store_conn, sam)
+    rows = messages.list_messages(store_conn, coach, thread["id"])
+    assert [(row["sender_id"], row["text"]) for row in rows] == list(demo.MESSAGES)
+    assert {sender for sender, _text in demo.MESSAGES} == {coach, sam}
+    assert users.list_relationships(store_conn, kim) == []
 
 
 @pytest.mark.parametrize("days_ago", range(7))

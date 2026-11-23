@@ -10,7 +10,17 @@ texts are our own writing, in the formal "Sie", and the owner reviews them befor
 AC-5).
 """
 
-from src.i18n import account, chat, dashboards, food, messages, profile, reviews, shared
+from src.i18n import (
+    account,
+    chat,
+    dashboards,
+    food,
+    messages,
+    profile,
+    reviews,
+    shared,
+    thread,
+)
 from src.i18n.core import (
     LANGUAGE_LABELS,
     LANGUAGES,
@@ -25,7 +35,7 @@ from src.i18n.core import (
 )
 
 # The page modules whose texts make up TEXT.
-PAGES = (shared, chat, messages, profile, food, dashboards, reviews, account)
+PAGES = (shared, chat, messages, profile, food, dashboards, reviews, account, thread)
 for _page in PAGES:
     add_texts(_page.__name__, _page.EN, _page.DE)
 del _page
