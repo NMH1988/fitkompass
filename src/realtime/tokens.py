@@ -1,4 +1,4 @@
-"""The chat server's signed, short-lived token (T11.4a, D24).
+"""The chat socket's signed, short-lived token (T11.4a, D24).
 
 The Streamlit page mints a token on each run for the acting user (worked out from `st.user`, or the
 demo picker's closed list) and one thread; the browser sends it as the socket's first message, and

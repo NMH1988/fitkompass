@@ -1,23 +1,35 @@
-"""The chat server's settings (T11.4a, D24): its address, the token's lifetime and its limits.
+"""The real-time messages' settings (T11.4a, T11.4b, D24): the socket's path, the token, the limits.
 
-The token's secret is read in `environment` (`chat_token_secret()`), like every other secret.
+The chat socket is mounted on Streamlit's own server (`serve.py`, `st.App`), so it has the page's
+host and port. The token's secret is read in `environment` (`chat_token_secret()`), like every
+other secret.
 """
 
-# Bound to this machine only: the server is never reachable from another host.
-CHAT_SERVER_HOST = "127.0.0.1"
-# Not 8502: Streamlit moves to the next free port when 8501 is taken.
-CHAT_SERVER_PORT = 8510
-# The socket's one path; the thread is in the token, never in the path or a query string.
+# Where the chat app is mounted on Streamlit's server, and its one socket inside it: the browser
+# opens `<mount><socket>` on the page's own host and port. The thread is in the token, never in the
+# path or a query string.
+# Not /chat: that is the coach's chat page, which a reload would then send to the socket's app.
+CHAT_MOUNT_PATH = "/realtime"
 CHAT_SOCKET_PATH = "/ws"
-# The pages allowed to open a socket: the Streamlit app opened on this machine. A browser always
-# sends the page's origin with a WebSocket handshake; one with another origin, or none, is refused.
-CHAT_ALLOWED_ORIGINS = frozenset({"http://localhost:8501", "http://127.0.0.1:8501"})
+# The hosts a local page may be opened at. The socket's allowed origins are these hosts on the port
+# Streamlit is serving (which it moves to 8502 when 8501 is taken), plus CHAT_PUBLIC_ORIGINS. A
+# browser always sends the page's origin with a WebSocket handshake; one with another origin, or
+# none, is refused, which also keeps out a page that rebinds its own name to this machine.
+CHAT_LOCAL_HOSTS = ("localhost", "127.0.0.1")
+# A public deployment's own https origin goes here, with the items in docs/DEPLOYMENT.md; none yet.
+CHAT_PUBLIC_ORIGINS: frozenset[str] = frozenset()
 # How long a token is valid (T11.4a): short, so a stolen one is soon useless, and the page renews it
 # on an open socket long before it ends. Read at call time, so a test can patch it.
 CHAT_TOKEN_TTL_SECONDS = 15 * 60
+# How long before its token expires the page asks for a new one (a rerun of the thread's fragment).
+# Two minutes leave room for a slow rerun; the server closes a socket whose token expired.
+CHAT_TOKEN_RENEW_BEFORE_SECONDS = 2 * 60
+# How long the page waits for a renewal's rerun on a live socket before it asks again: a quarter
+# of the margin above, so a slow rerun is not asked for twice and the token still has time left.
+CHAT_RENEW_RETRY_SECONDS = 30
 # A token longer than this is refused before it is decoded (a real one is about 200 characters).
 CHAT_TOKEN_MAX_CHARS = 1024
-# The clock difference a token's expiry may show (both processes read this machine's clock; one
+# The clock difference a token's expiry may show (the page and the socket read the same clock; one
 # second covers rounding to whole seconds).
 CHAT_TOKEN_SKEW_SECONDS = 1
 # How long the server waits for a new socket's first message (the token) before closing it.
@@ -32,5 +44,12 @@ CHAT_MAX_FRAME_BYTES = 8 * 1024
 # another for an error inside the server.
 CHAT_CLOSE_REFUSED = 4401
 CHAT_CLOSE_ERROR = 1011
-# The fixed error a sender gets when the store refuses a message (never the reason).
+# The fixed error a sender gets when the store refuses a message or cannot store it (never the
+# reason).
 CHAT_ERROR_NOT_SENT = "not_sent"
+# The page's reconnect: the first wait after a close it did not ask for, doubled after each failed
+# try up to the longest; and how many refusals in a row (each after a new token) it takes before it
+# stops and says it is not connected.
+CHAT_RECONNECT_FIRST_SECONDS = 1
+CHAT_RECONNECT_MAX_SECONDS = 30
+CHAT_RECONNECT_MAX_REFUSALS = 3

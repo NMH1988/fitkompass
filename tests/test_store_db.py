@@ -690,7 +690,8 @@ def test_a_migration_8_that_fails_halfway_leaves_the_version_7_file_as_it_was(tm
 
 # --- A second process: write-ahead log mode and the busy timeout (T11.3, D24) ---------------------
 
-# Writes one gymer through the store from another process, as the chat server will (D24).
+# Writes one gymer through the store from another process: the chat socket's own connections share
+# the app's process since T11.4b (D24), and another process is the harder case of the same WAL rule.
 _CHILD_WRITE = """
 import sys
 from pathlib import Path
@@ -773,7 +774,7 @@ def test_a_second_writer_waits_for_the_first_instead_of_failing(tmp_path):
 
 
 def test_a_second_process_writes_while_the_app_holds_the_store_open(tmp_path):
-    """Another process (as the chat server will be) writes while this one is inside a read."""
+    """Another process writes while this one is inside a read (WAL: a commit never waits)."""
     path = tmp_path / "s.sqlite3"
     with db.connect(path) as conn:
         conn.execute("BEGIN")
@@ -816,7 +817,7 @@ def test_a_store_that_cannot_be_switched_to_wal_is_not_opened(tmp_path, monkeypa
 def test_a_store_left_in_another_mode_is_not_opened(tmp_path, monkeypatch):
     """A switch that leaves the file in another mode (no error) closes the store too."""
     monkeypatch.setattr(db, "_WAL_ON", "PRAGMA journal_mode = DELETE")
-    with pytest.raises(db.StoreError, match="second process"):
+    with pytest.raises(db.StoreError, match="several connections"):
         with db.connect(tmp_path / "s.sqlite3"):
             pass
 

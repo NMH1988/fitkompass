@@ -1,4 +1,4 @@
-"""Tests for the chat server's token and its secret (T11.4a, D24): mint, verify, refuse."""
+"""Tests for the chat socket's token and its secret (T11.4a, D24): mint, verify, refuse."""
 
 import ast
 import base64
@@ -223,7 +223,8 @@ _SECRET_NAMES = {
     config.CHAT_TOKEN_SECRET_NAME,
     config.CHAT_TOKEN_SECRET_PLACEHOLDER,
 }
-_SCANNED = [*(ROOT / "src").rglob("*.py"), *(ROOT / "views").rglob("*.py"), ROOT / "app.py"]
+_SCANNED = [*(ROOT / "src").rglob("*.py"), *(ROOT / "views").rglob("*.py")]
+_SCANNED += [ROOT / "app.py", ROOT / "serve.py"]
 _SCANNED += sorted((ROOT / "scripts").glob("*.py"))
 
 
@@ -239,7 +240,7 @@ def _reads_the_secret(node: ast.AST) -> bool:
 
 
 def test_only_the_config_function_reads_the_secret():
-    """No other module names the secret's key or variable, or calls the reader but the server."""
+    """No other module names the secret's key or variable; only the socket and the page read it."""
     environment = ROOT / "src" / "config" / "environment.py"
     named, callers = [], []
     for path in _SCANNED:
@@ -252,8 +253,8 @@ def test_only_the_config_function_reads_the_secret():
             if _reads_the_secret(node):
                 callers.append(relative)
     assert named == []
-    # The server reads it; T11.4b's page will mint with it too (add it here then).
-    assert set(callers) <= {"src/realtime/app.py", "src/realtime/server.py"}
+    # The socket verifies with it, and the Messages page's helper mints with it (T11.4b).
+    assert set(callers) == {"src/realtime/app.py", "src/realtime/page.py"}
 
 
 def test_the_callers_scan_sees_an_import_and_a_bare_name():

@@ -1,0 +1,91 @@
+/* The Messages component's styles (T11.4b): Streamlit's theme variables, so light and dark follow. */
+.fk-messages {
+  font-family: var(--st-font);
+  color: var(--st-text-color);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.fk-list {
+  max-height: 28rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  border: 1px solid var(--st-border-color);
+  border-radius: var(--st-base-radius);
+  background: var(--st-secondary-background-color);
+}
+
+.fk-message {
+  max-width: 80%;
+  padding: 0.4rem 0.7rem;
+  border-radius: var(--st-base-radius);
+  background: var(--st-background-color);
+  border: 1px solid var(--st-border-color);
+}
+
+.fk-mine {
+  align-self: flex-end;
+}
+
+.fk-theirs {
+  align-self: flex-start;
+}
+
+.fk-meta {
+  font-size: 0.8em;
+  opacity: 0.75;
+}
+
+.fk-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.fk-empty,
+.fk-status,
+.fk-notice {
+  font-size: 0.9em;
+  opacity: 0.8;
+  margin: 0;
+}
+
+.fk-form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-end;
+}
+
+.fk-form[hidden] {
+  display: none;
+}
+
+.fk-input {
+  flex: 1;
+  font: inherit;
+  color: inherit;
+  background: var(--st-background-color);
+  border: 1px solid var(--st-border-color);
+  border-radius: var(--st-base-radius);
+  padding: 0.4rem;
+  resize: vertical;
+}
+
+.fk-send {
+  font: inherit;
+  color: #ffffff;
+  background: var(--st-primary-color);
+  border: none;
+  border-radius: var(--st-button-radius);
+  padding: 0.45rem 1rem;
+  cursor: pointer;
+}
+
+.fk-send:disabled,
+.fk-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
