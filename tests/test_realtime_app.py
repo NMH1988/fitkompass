@@ -1,4 +1,4 @@
-"""Tests for the chat server's app (T11.4a, D24): delivery, catch-up, refusals and renewal.
+"""Tests for the chat socket's app (T11.4a, D24): delivery, catch-up, refusals and renewal.
 
 FastAPI's TestClient runs the app in one event loop of its own, so two connections from one client
 share the server's hub, as two browsers on one uvicorn process do. The store is the test's own

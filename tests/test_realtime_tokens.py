@@ -1,4 +1,4 @@
-"""Tests for the chat server's token and its secret (T11.4a, D24): mint, verify, refuse."""
+"""Tests for the chat socket's token and its secret (T11.4a, D24): mint, verify, refuse."""
 
 import ast
 import base64
