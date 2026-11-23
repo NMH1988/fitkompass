@@ -148,7 +148,7 @@ def user_key_secret() -> str | None:
 
 def chat_token_secret() -> str | None:
     """Return the chat token secret; None if missing, too short or the example's placeholder."""
-    # secrets.toml first, then the environment (T11.4b's launcher may hand it to both processes).
+    # secrets.toml first, then the environment (e.g. a host's secret settings).
     section = _secret(CHAT_SECTION)
     value = section.get(CHAT_TOKEN_SECRET_NAME) if isinstance(section, Mapping) else None
     secret = value.strip() if isinstance(value, str) else ""

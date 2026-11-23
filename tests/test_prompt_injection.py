@@ -310,11 +310,23 @@ def test_nothing_in_the_app_renders_with_unsafe_allow_html():
     assert {path: lines for path, lines in found.items() if lines} == {}
 
 
+# The one component (T11.4b): the Messages thread, our own JavaScript and CSS read from the repo,
+# which shows message text with textContent only (tests/test_messages_component.py).
+COMPONENT_FILES = {VIEWS / "messages.py"}
+
+
 def test_the_app_uses_no_raw_html_components():
-    """The app and its views use no streamlit.components (raw HTML in an iframe)."""
-    used = set().union(*(_code_names(path) for path in APP_FILES))
+    """No streamlit.components (raw HTML in an iframe), but the Messages page's own component."""
+    others = [path for path in APP_FILES if path not in COMPONENT_FILES]
+    used = set().union(*(_code_names(path) for path in others))
     assert "components" not in used
     assert not any(name.startswith("streamlit.components") for name in used)
+    # The Messages page uses components v2 only, registered with fixed html, css and js: never the
+    # v1 iframe (html(), iframe(), declare_component()).
+    page = (VIEWS / "messages.py").read_text(encoding="utf-8")
+    assert page.count("st.components.v2.component(") == 1
+    names = _code_names(VIEWS / "messages.py")
+    assert not {"v1", "declare_component", "iframe"} & names
 
 
 # --- The question in the query translation call (T3.2 AC 4, follow-up from T3.4) ------------------

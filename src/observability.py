@@ -62,8 +62,6 @@ EVENTS = frozenset(
         "chat_connection",
         "chat_message",
         "chat_error",
-        # The chat server's process started, or refused to start (a fixed reason code).
-        "chat_server",
         LOG_FAILED_EVENT,
     }
 )
@@ -170,9 +168,7 @@ class _JsonHandler(logging.StreamHandler):
 _LOCK = threading.Lock()
 
 
-def configure_logging(
-    level: str | int | None = None, stream: IO[str] | None = None, *, with_tracing: bool = True
-) -> None:
+def configure_logging(level: str | int | None = None, stream: IO[str] | None = None) -> None:
     """Send the app's log lines to stderr as JSON, and set up masked tracing or turn it off."""
     # No file handler: the lines go to the process's stderr and the host decides where they land.
     # `stream` is for tests. propagate is off, so a handler on the root logger cannot print the
@@ -191,22 +187,17 @@ def configure_logging(
         for name in _CHATTY_LIBRARIES:
             logging.getLogger(name).setLevel(logging.WARNING)
     # Here because the page and every script call this first (T9.8): tracing is off unless the
-    # app's flag and the LangSmith key are set, whatever LangSmith's own environment flag says. A
-    # process that runs no model (the chat server, T11.4a) passes with_tracing=False: tracing is
-    # then off whatever the flags say, and no LangSmith client is installed in it.
-    if with_tracing:
-        tracing.configure_tracing()
-    else:
-        tracing.turn_off_tracing()
+    # app's flag and the LangSmith key are set, whatever LangSmith's own environment flag says.
+    tracing.configure_tracing()
 
 
 def capture_library_logs(names: tuple[str, ...], level: int = logging.WARNING) -> None:
     """Send these libraries' records, from `level` up, through the app's JSON handler only."""
-    # For the chat server (T11.4a): uvicorn's and asyncio's own lines could quote a client's
-    # address, a request line or an error's traceback. Through the JSON formatter each becomes a
-    # line with its level and logger name only (the event `unnamed_event`), never its text or
-    # arguments; propagate is off, so no other handler (Python's last resort) prints them. Call
-    # configure_logging() first.
+    # For the server under the chat socket (T11.4a, T11.4b): uvicorn's and asyncio's own lines could
+    # quote a client's address, a request line or an error's traceback. Through the JSON formatter
+    # each becomes a line with its level and logger name only (the event `unnamed_event`), never its
+    # text or arguments; propagate is off, so no other handler (Python's last resort) prints them.
+    # Call configure_logging() first.
     app_logger = logging.getLogger(LOGGER_NAME)
     handler = next((h for h in app_logger.handlers if getattr(h, "is_app_handler", False)), None)
     if handler is None:

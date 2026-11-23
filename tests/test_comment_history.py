@@ -21,7 +21,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-SCANNED = [ROOT / "src", ROOT / "views", ROOT / "scripts", ROOT / "app.py"]
+SCANNED = [ROOT / "src", ROOT / "views", ROOT / "scripts", ROOT / "app.py", ROOT / "serve.py"]
 
 _DATE = r"\b20\d\d-\d\d-\d\d\b"
 # Up to 40 characters inside one clause: no sentence end (". "), semicolon or closing bracket.

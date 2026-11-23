@@ -1,9 +1,12 @@
-"""The chat server's FastAPI app (T11.4a, D24): one WebSocket that delivers coach-client messages.
+"""The chat app (T11.4a, D24): one WebSocket that delivers coach-client messages.
 
-A socket belongs to one user and one thread, both taken only from a token that verifies
-(`tokens.verify()`), sent as the socket's first message; nothing else the browser sends names a user
-or a thread. Before the socket is accepted, the page's `Origin` must be on the allowlist and the URL
-must have no query string (a token there would reach uvicorn's access log). Then:
+It is mounted on Streamlit's own server (`src/realtime/server.py`, `serve.py`), so the socket is at
+`config.CHAT_MOUNT_PATH` + `config.CHAT_SOCKET_PATH` on the page's host and port. A socket belongs
+to one user and one thread, both taken only from a token that verifies (`tokens.verify()`), sent as
+the socket's first message; nothing else the browser sends names a user or a thread. Before the
+socket is accepted, the page's `Origin` must be on the allowlist (the local hosts on the port
+Streamlit serves, and the public origins in config) and the URL must have no query string (a token
+there would reach an access log). Then:
 
 - the first frame is `{"type": "auth", "token": ..., "after_id": n}`, within
   `config.CHAT_AUTH_WAIT_SECONDS`; the token must verify and its user must be a side of its thread
@@ -17,15 +20,16 @@ must have no query string (a token there would reach uvicorn's access log). Then
   catch-up came before";
 - `{"type": "send", "text": ...}` stores a message through `src/store/messages.py` and pushes it to
   every open socket of that thread; the other side's sockets on other threads get a notification
-  with the kind and the thread only, never the text. A message the store refuses gives the sender
-  the fixed `config.CHAT_ERROR_NOT_SENT`, never the reason;
+  with the kind and the thread only, never the text. A message the store refuses, or cannot store
+  (busy past its timeout, unavailable), gives the sender the fixed `config.CHAT_ERROR_NOT_SENT`,
+  never the reason, and the socket stays open;
 - an `auth` frame on an open socket renews it: its token is verified like the first, and a token for
   another user or thread closes the socket; its `after_id` only moves the socket forward, so a
   message already sent is never sent again; a socket whose token expires unrenewed is closed.
 
 Every push reads the recipient's messages through `messages.list_messages()`, the store's read with
 its own side check, so nothing reaches a user who is no longer a side of the thread. The browser
-gets `mine` for each message, never a user ID. The handler catches every error, logs only its
+gets `mine` for each message, never a user ID. The handler catches every other error, logs only its
 diagnostic and closes with `config.CHAT_CLOSE_ERROR`, so uvicorn never logs a traceback (which
 could quote a message); no log line holds a message's text, a token or an address.
 """
@@ -45,7 +49,7 @@ from anyio import to_thread
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 from src import config, llm
-from src.realtime import tokens
+from src.realtime import page, tokens
 from src.store import db, messages, values
 from src.store.access import NotFound
 
@@ -171,19 +175,6 @@ def _auth(frame: dict, secret: str) -> tuple[tokens.Claims, int]:
     return claims, after_id
 
 
-def _items(rows: list[dict], user_id: str) -> list[dict]:
-    """Return the messages as the browser gets them: `mine` instead of the sender's ID."""
-    return [
-        {
-            "id": row["id"],
-            "mine": row["sender_id"] == user_id,
-            "text": row["text"],
-            "created_at": row["created_at"],
-        }
-        for row in rows
-    ]
-
-
 async def _send_json(socket: _Socket, payload: dict) -> None:
     """Send one JSON frame on a socket."""
     await socket.websocket.send_text(json.dumps(payload))
@@ -214,7 +205,8 @@ async def _catch_up(path: Path, socket: _Socket, from_id: int | None = None) -> 
             socket.last_id = rows[-1]["id"]
         if rows or more:
             await _send_json(
-                socket, {"type": "messages", "items": _items(rows, socket.user_id), "more": more}
+                socket,
+                {"type": "messages", "items": page.items(rows, socket.user_id), "more": more},
             )
 
 
@@ -280,6 +272,12 @@ async def _notify(path: Path, hub: Hub, thread_id: int, sender_id: str) -> None:
                 await _close(socket.websocket, config.CHAT_CLOSE_ERROR)
 
 
+async def _not_sent(socket: _Socket) -> None:
+    """Tell the sender their message was not stored: the fixed error, never the reason."""
+    async with socket.lock:
+        await _send_json(socket, {"type": "error", "code": config.CHAT_ERROR_NOT_SENT})
+
+
 async def _send(path: Path, hub: Hub, socket: _Socket, frame: dict) -> None:
     """Store a message from this socket's user and push it; a refusal gets the fixed error."""
     if set(frame) != {"type", "text"}:
@@ -293,8 +291,14 @@ async def _send(path: Path, hub: Hub, socket: _Socket, frame: dict) -> None:
     except NotFound, values.StoreValueError:
         # Ended, deleted, empty or too long: the sender learns only that it was not sent.
         logger.info("chat_message", extra={"status": "refused"})
-        async with socket.lock:
-            await _send_json(socket, {"type": "error", "code": config.CHAT_ERROR_NOT_SENT})
+        await _not_sent(socket)
+        return
+    except (sqlite3.Error, db.StoreError) as exc:
+        # The store failed (busy past its timeout, or unavailable): the transaction rolled back, so
+        # "not sent" is true, and the page puts the text back (kept if the store is back by the
+        # fragment's rerun). The socket stays open.
+        logger.warning("chat_error", extra={"diagnostic": llm.error_diagnostic(exc)})
+        await _not_sent(socket)
         return
     logger.info("chat_message", extra={"status": "sent"})
     for receiver in hub.on_thread(socket.thread_id):
@@ -324,12 +328,14 @@ async def _renew(path: Path, socket: _Socket, frame: dict, secret: str) -> None:
     await _ready(socket)
 
 
-async def _serve(path: Path, hub: Hub, websocket: WebSocket) -> None:
+async def _serve(
+    path: Path, hub: Hub, websocket: WebSocket, allowed_origins: frozenset[str]
+) -> None:
     """Check the handshake and the token, then relay frames until the socket closes or expires."""
     origin = websocket.headers.get("origin")
-    if origin not in config.CHAT_ALLOWED_ORIGINS or websocket.scope.get("query_string"):
+    if origin not in allowed_origins or websocket.scope.get("query_string"):
         # Refused before the handshake completes; the browser sees a failed connection.
-        _log_connection("refused", "origin" if origin not in config.CHAT_ALLOWED_ORIGINS else "url")
+        _log_connection("refused", "origin" if origin not in allowed_origins else "url")
         await websocket.close(code=config.CHAT_CLOSE_REFUSED)
         return
     secret = config.chat_token_secret()
@@ -368,17 +374,22 @@ async def _serve(path: Path, hub: Hub, websocket: WebSocket) -> None:
             hub.remove(socket)
 
 
-def create_app(store_path: Path) -> FastAPI:
-    """Return the chat server's app, reading and writing the store file at `store_path`."""
+def create_app(
+    store_path: Callable[[], Path], allowed_origins: Callable[[], frozenset[str]]
+) -> FastAPI:
+    """Return the chat app: it uses the store `store_path()` names, for these origins."""
+    # Both are read for each socket: in demo mode the store is the page's temporary one, made on
+    # first use, and the allowed origins follow the port Streamlit is serving.
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, telemetry=_NO_TELEMETRY)
     hub = Hub()
     app.state.hub = hub
 
     @app.websocket(config.CHAT_SOCKET_PATH)
     async def chat_socket(websocket: WebSocket) -> None:
-        """Serve one socket; every error is logged by its diagnostic only and closes it."""
+        """Serve one socket; any error that reaches here is logged by diagnostic and closes it."""
         try:
-            await _serve(store_path, hub, websocket)
+            path = await to_thread.run_sync(store_path)
+            await _serve(path, hub, websocket, allowed_origins())
         except WebSocketDisconnect:
             _log_connection("closed")
         except Exception as exc:  # noqa: BLE001 - uvicorn would log the traceback, which may quote

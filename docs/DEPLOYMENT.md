@@ -57,10 +57,14 @@ Off unless `FITKOMPASS_TRACING` and `LANGSMITH_API_KEY` are both set (secrets or
 
 `FITKOMPASS_TRACING_DEMO_UNMASKED` (T9.35) is for a local demo with made-up users only: it works only with `DEMO_MODE` and never with `[auth]`, and a public deployment never sets it.
 
+## Real-time messages (T11.4b, D24)
+
+The chat socket is mounted on Streamlit's own server: `streamlit run serve.py` serves the pages and the socket (at `/realtime/ws`) from one process and one port; `streamlit run app.py` serves the pages alone, and the Messages page is then read-only. Locally the socket accepts only a page at `http://localhost:<port>` or `http://127.0.0.1:<port>` on the port Streamlit serves. Before a public deployment of the socket (compliance run 1 of T11.4a): the page and the socket over https and `wss://` (TLS at the host or a reverse proxy that passes WebSocket upgrades on `/realtime/ws`), the public https origin added to `config.CHAT_PUBLIC_ORIGINS`, the access gate of option 2, the token secret (`[chat] token_secret`) in the host's secret settings, a send rate limit, a store on a disk that survives restarts, a proxy's or host's own access lines (address, path, time) in the privacy notice and the retention plan, and the real-time design passed to the lawyer's TDDDG §3 review (`docs/PRD.md`, "Before any real user"). On Streamlit's server the socket has Streamlit's own uvicorn settings, not the stricter ones T11.4a's separate server had: a frame up to `server.maxMessageSize` (200 MB by default) is read before the socket's own 8 KB cap closes it, and the proxy and server headers are uvicorn's defaults as Streamlit sets them; decide for the deployment whether to lower `server.maxMessageSize` (it caps Streamlit's own messages too, such as uploads) and which proxy may set forwarded headers. Whether Streamlit Community Cloud runs an `st.App` main file and passes a custom WebSocket path is not documented (checked 2026-11-23); a host that runs `streamlit run serve.py` behind TLS does.
+
 ## Deploy steps (Streamlit Community Cloud, first time)
 
 1. Sign in at https://share.streamlit.io with the GitHub account that owns the repo.
-2. Create an app: repo `NMH1988/fitkompass`, branch `main`, main file `app.py`.
+2. Create an app: repo `NMH1988/fitkompass`, branch `main`, main file `app.py` (`serve.py` for real-time messages, once the items in "Real-time messages" above are done).
 3. In advanced settings: choose the Python version; paste secrets only if option 2 above is used.
 4. Deploy, open the URL, and run the checks below.
 5. Optional: set the repo variable `APP_URL` and add the Sprint 1 style CD workflow that waits for CI on `main` and then calls `<APP_URL>/_stcore/health`.

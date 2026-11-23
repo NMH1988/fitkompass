@@ -816,7 +816,7 @@ def test_a_store_that_cannot_be_switched_to_wal_is_not_opened(tmp_path, monkeypa
 def test_a_store_left_in_another_mode_is_not_opened(tmp_path, monkeypatch):
     """A switch that leaves the file in another mode (no error) closes the store too."""
     monkeypatch.setattr(db, "_WAL_ON", "PRAGMA journal_mode = DELETE")
-    with pytest.raises(db.StoreError, match="second process"):
+    with pytest.raises(db.StoreError, match="several connections"):
         with db.connect(tmp_path / "s.sqlite3"):
             pass
 
