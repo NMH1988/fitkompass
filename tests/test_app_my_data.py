@@ -158,8 +158,12 @@ def test_a_coach_sees_the_account_and_the_export(monkeypatch):
     assert "Alex · Coach" in page
     assert "Profile entries" not in page
     # T9.34: where the foods the coach suggests are kept (compliance run 1).
-    assert "The foods you suggest to a client are stored as the client's data" in page
-    assert "your export holds when you saved each list" in page
+    # T11.7: and the meal plans the coach sets for a client, the same way.
+    assert (
+        "The foods you suggest to a client and the meal plans you set for them are stored as the "
+        "client's data" in page
+    )
+    assert "your export holds when you saved each list and plan" in page
     button(at, "Prepare the export").click().run(timeout=30)
     assert json.loads(at.session_state["my_data_export"])["user"]["role"] == "coach"
 
@@ -425,10 +429,9 @@ def test_my_data_says_where_the_relationships_are(monkeypatch, gymer_with_record
     """The gymer's intro: relationships, sharing, questions, the coach's reads, the read mark."""
     at = open_my_data(start(monkeypatch, user=signed_in()))
     page = texts(at)
-    assert (
-        "relationships, sharing choices, the foods your coaches suggested to you, your questions"
-        in page
-    )
+    assert "relationships, sharing choices, the foods your coaches suggested to you" in page
+    # T11.7: the coaches' meal plans for the gymer are in the export too.
+    assert "the meal plans your coaches set for you, your questions" in page
     assert "your coach's reads of your data and your notification read mark" in page
 
 

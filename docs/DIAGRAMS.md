@@ -154,10 +154,10 @@ flowchart TB
 | Scope | What it shares |
 |---|---|
 | body | weights, profile entries |
-| nutrition | the food log, targets, the coach's reviews, the coach's suggested foods |
+| nutrition | the food log, targets, the coach's reviews, the coach's suggested foods, the coach's meal plan |
 | training | workouts |
 | (never) | preferences |
 
 - The rule is written once, as the `open_shares` view; every read of another user's data goes through `access.authorised_read()`, in the store, never only in the UI or a prompt. Two documented exceptions: the other side's display name (checked against the relationship, not audited), and the sidebar's count and the toasts of a coach's client questions, checked like a read but with no audit row (the Notifications page audits it) ([`ARCHITECTURE.md`](ARCHITECTURE.md), section 16).
-- There are two writes into a client's records, both needing the nutrition scope: a coach's nutrition target and, from T9.34, a coach's list of suggested foods. The same check runs inside each write, with the audit row `target_set` or `suggestions_set`.
+- There are three writes into a client's records, all needing the nutrition scope: a coach's nutrition target, from T9.34 a coach's list of suggested foods and, from T11.7, a coach's meal plan. The same check runs inside each write, with the audit row `target_set`, `suggestions_set` or `meal_plan_set`.
 - Each signed-in user can export or delete all their own data (My data).

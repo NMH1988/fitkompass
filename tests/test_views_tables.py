@@ -1089,6 +1089,10 @@ def test_a_notification_s_time_is_shown_in_berlin(stamp, shown):
          "Bo updated the foods they suggest to you."),
         (_notification("suggestions_updated"), "gymer", "de",
          "Bo hat die vorgeschlagenen Lebensmittel geändert."),
+        # T11.7: the coach's name only, never a food or an amount.
+        (_notification("meal_plan_updated"), "gymer", "en", "Bo updated your meal plan."),
+        (_notification("meal_plan_updated"), "gymer", "de",
+         "Bo hat Ihren Ernährungsplan geändert."),
         # T11.3: the sender's name only, never the message's text; either side.
         (_notification("message_received"), "coach", "en", "Bo sent you a message."),
         (_notification("message_received"), "gymer", "de",

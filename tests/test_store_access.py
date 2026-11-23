@@ -19,6 +19,7 @@ from src import config
 from src.store import (
     access,
     invitations,
+    meal_plans,
     messages,
     questions,
     records,
@@ -49,6 +50,8 @@ READS = {
     "list_question_events": (questions.list_question_events, "nutrition"),
     # T9.34: the active list of suggested foods (a coach: the newest one they wrote for the client).
     "current_suggestions": (suggestions.current_suggestions, "nutrition"),
+    # T11.7: the active meal plan (a coach: the newest one they wrote for the client).
+    "current_meal_plan": (meal_plans.current_meal_plan, "nutrition"),
 }
 # (actor, subject) pairs that must give NotFound for every read function.
 REFUSED = {
@@ -169,6 +172,8 @@ COACH_WRITES = {
     "records.add_client_target": "nutrition",
     # T9.34: a coach's list of suggested foods for a client.
     "suggestions.add_client_suggestions": "nutrition",
+    # T11.7: a coach's meal plan for a client, the third write into a client's records.
+    "meal_plans.add_client_meal_plan": "nutrition",
 }
 
 
@@ -704,22 +709,31 @@ COACH_WRITE_CALLS = {
             conn, coach, client, [suggestions.SuggestedFood("lunch", 1, "Oats", 80.0)]
         )
     ),
+    "meal_plans.add_client_meal_plan": lambda conn, coach, client: meal_plans.add_client_meal_plan(
+        conn,
+        coach,
+        client,
+        [meal_plans.PlannedFood("lunch", 1, "Oats", 400.0, 1500.0, 50.0, 260.0, 26.0)],
+    ),
 }
 # The audit action each coach write leaves.
 COACH_WRITE_ACTIONS = {
     "records.add_client_target": "target_set",
     "suggestions.add_client_suggestions": "suggestions_set",
+    "meal_plans.add_client_meal_plan": "meal_plan_set",
 }
 
 
 def _target_count(conn):
-    """Return the number of rows the coach writes add: targets, suggestion lists and items."""
+    """Return the number of rows the coach writes add: targets, suggestions and meal plans."""
     return sum(
         conn.execute(query).fetchone()[0]
         for query in (
             "SELECT count(*) FROM nutrition_targets",
             "SELECT count(*) FROM food_suggestion_lists",
             "SELECT count(*) FROM food_suggestion_items",
+            "SELECT count(*) FROM meal_plans",
+            "SELECT count(*) FROM meal_plan_items",
         )
     )
 

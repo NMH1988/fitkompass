@@ -5,19 +5,20 @@ of, the reviews they may read (a gymer's approved reviews about them without the
 coach's own reviews of clients who still share nutrition and every other scope each review used,
 with the reviews' evidence and scopes), the questions to the coach and the answers under the
 approved ones among them (T9.25), the audit rows by or about them, the user's own notification
-read mark (T9.29; never the other side's), the foods coaches suggested to them (T9.34) and every
-message of the threads they are a side of, both sides' messages, ended relationships' too (T11.3).
-The delete removes the user's rows in every table, their relationships and scopes, the
-reviews about them and those they wrote as a coach (with their evidence, questions and answers),
-every question or answer the user wrote, the lists of suggested foods between the user and a coach
-or client (T9.34), the messages of every thread the user is a side of (T11.3), so a thread goes
-when either side deletes their data, the invitations and code attempts, the read mark, and the
-audit rows by or about them: the app is local and keeps no audit duty (the owner may change this).
-It runs in one transaction with foreign keys on, and no reference cascades, so a table this list
-forgets makes the delete fail instead of leaving rows behind. The review workflow's threads in its
-checkpointer file go too, through the caller's `delete_threads` (T9.16). After the commit the
-store's write-ahead log is checkpointed and emptied, so the deleted rows' earlier copies are not
-left in its `-wal` file.
+read mark (T9.29; never the other side's), the foods coaches suggested to them (T9.34), every
+message of the threads they are a side of, both sides' messages, ended relationships' too (T11.3),
+and the meal plans coaches wrote for them (T11.7).
+The delete removes the user's rows in every table, their relationships and scopes, the reviews about
+them and those they wrote as a coach (with their evidence, questions and answers), every question or
+answer the user wrote, the lists of suggested foods between the user and a coach or client (T9.34)
+and the meal plans between them (T11.7), the messages of every thread the user is a side of (T11.3),
+so a thread goes when either side deletes their data, the invitations and code attempts, the read
+mark, and the audit rows by or about them: the app is local and keeps no audit duty (the owner may
+change this). It runs in one transaction with foreign keys on, and no reference cascades, so a table
+this list forgets makes the delete fail instead of leaving rows behind. The review workflow's
+threads in its checkpointer file go too, through the caller's `delete_threads` (T9.16). After the
+commit the store's write-ahead log is checkpointed and emptied, so the deleted rows' earlier copies
+are not left in its `-wal` file.
 """
 
 import json
@@ -157,6 +158,14 @@ SELECT item.* FROM food_suggestion_items AS item
 JOIN food_suggestion_lists AS list ON list.id = item.list_id
 WHERE list.client_id = ? ORDER BY item.id
 """
+# The coaches' meal plans for the user as a client (T11.7), a former coach's hidden plan too; never
+# the plans a coach wrote, which are their clients' data.
+_MEAL_PLANS = "SELECT * FROM meal_plans WHERE client_id = ? ORDER BY id"
+_MEAL_PLAN_ITEMS = """
+SELECT item.* FROM meal_plan_items AS item
+JOIN meal_plans AS plan ON plan.id = item.plan_id
+WHERE plan.client_id = ? ORDER BY item.id
+"""
 # The messages of every thread the user is a side of, active or ended, both sides' (T11.3): both
 # sides read the whole thread, so both exports hold it.
 _MESSAGES = """
@@ -187,6 +196,12 @@ DELETE FROM food_suggestion_items
 WHERE list_id IN (SELECT id FROM food_suggestion_lists WHERE client_id = ? OR coach_id = ?)
 """
 _DELETE_SUGGESTION_LISTS = "DELETE FROM food_suggestion_lists WHERE client_id = ? OR coach_id = ?"
+# The meal plans between the user and a coach or client, whichever side the user is (T11.7).
+_DELETE_MEAL_PLAN_ITEMS = """
+DELETE FROM meal_plan_items
+WHERE plan_id IN (SELECT id FROM meal_plans WHERE client_id = ? OR coach_id = ?)
+"""
+_DELETE_MEAL_PLANS = "DELETE FROM meal_plans WHERE client_id = ? OR coach_id = ?"
 # The workflow threads of the reviews about the user or by them (T9.16), deleted with them.
 _THREADS = """
 SELECT thread_id FROM ai_reviews
@@ -276,6 +291,8 @@ def export_user_data(conn: sqlite3.Connection, user_id: str) -> str:
             "food_suggestion_lists": [dict(r) for r in conn.execute(_SUGGESTION_LISTS, one)],
             "food_suggestion_items": [dict(r) for r in conn.execute(_SUGGESTION_ITEMS, one)],
             "messages": [dict(r) for r in conn.execute(_MESSAGES, both)],
+            "meal_plans": [dict(r) for r in conn.execute(_MEAL_PLANS, one)],
+            "meal_plan_items": [dict(r) for r in conn.execute(_MEAL_PLAN_ITEMS, one)],
         }
     return json.dumps(document, ensure_ascii=False, indent=2)
 
@@ -305,6 +322,8 @@ def delete_user_data(
         conn.execute(_DELETE_REVIEWS, both)
         conn.execute(_DELETE_SUGGESTION_ITEMS, both)
         conn.execute(_DELETE_SUGGESTION_LISTS, both)
+        conn.execute(_DELETE_MEAL_PLAN_ITEMS, both)
+        conn.execute(_DELETE_MEAL_PLANS, both)
         conn.execute(_DELETE_AUDIT, both)
         conn.execute(_DELETE_MESSAGES, (user_id, user_id, user_id))
         conn.execute(_DELETE_CONSENTS, both)

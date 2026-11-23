@@ -19,7 +19,16 @@ from src import account, chat, config, llm, observability
 from src.agent import review, review_threads
 from src.rag.retriever import RetrievedChunk, chunk_key
 from src.rag.store import IndexNotReadyError
-from src.store import access, my_data, questions, records, reviews, suggestions, users
+from src.store import (
+    access,
+    meal_plans,
+    my_data,
+    questions,
+    records,
+    reviews,
+    suggestions,
+    users,
+)
 from tests import store_world as world
 from tests.fakes import ScriptedTranslator
 
@@ -188,6 +197,24 @@ def test_suggested_foods_and_their_share_never_reach_the_review_s_model(store_co
     # The share's field names (metrics.SuggestedShare), not "suggest": the draft's own schema
     # has model_suggestion.
     for canary in ("CANARY", "66.6", "suggested_items", "energy_share", "from_suggestion"):
+        assert canary not in sent, canary
+        assert canary not in json.dumps(_stored(store_conn)), canary
+
+
+def test_a_meal_plan_never_reaches_the_review_s_model(store_conn, relationships):
+    """T11.7: a canary meal plan is in no message to the review's model and in no stored review."""
+    meal_plans.add_client_meal_plan(
+        store_conn,
+        world.COACH_A,
+        world.SHARED,
+        [meal_plans.PlannedFood("dinner", 7, "CANARY-PLAN pasta", 432.1, 1777.7, 1.0, 2.0, 3.0)],
+    )
+    model = _model(_draft())
+    assert _start(_context(model)).outcome == "pending"
+    [messages] = model.calls
+    sent = "\n".join(str(message.content) for message in messages)
+    assert "<metrics>" in sent
+    for canary in ("CANARY-PLAN", "432.1", "1777", "meal_plan"):
         assert canary not in sent, canary
         assert canary not in json.dumps(_stored(store_conn)), canary
 

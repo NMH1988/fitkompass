@@ -21,6 +21,7 @@ Keep the entry short and record what the code does not say. `tests/test_docs_lay
 
 ---
 
+- [2026-11-23 · T11.7 The coach's meal plan for a client · NMH1988/fitkompass#<PR> (closes NMH1988/fitkompass#14)](progress/2026-11-23-T11.7.md)
 - [2026-11-20 · T11.4a Records: status done after the merge · NMH1988/fitkompass#27 (closes NMH1988/fitkompass#26)](progress/2026-11-20-T11.4a-2.md)
 - [2026-11-20 · T11.4a Real-time messages, part 1: the chat server and its signed token · NMH1988/fitkompass#25 (closes NMH1988/fitkompass#10)](progress/2026-11-20-T11.4a.md)
 - [2026-11-20 · T11.3 Coach-client messages in the store · NMH1988/fitkompass#24 (closes NMH1988/fitkompass#9)](progress/2026-11-20-T11.3.md)

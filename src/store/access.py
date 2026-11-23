@@ -28,6 +28,7 @@ Action = Literal[
     "review_answered",
     "target_set",
     "suggestions_set",
+    "meal_plan_set",
 ]
 
 _ROLE = "SELECT role FROM users WHERE id = ?"

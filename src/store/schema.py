@@ -500,5 +500,71 @@ BEGIN SELECT RAISE(ABORT, 'stored records are never changed in place'); END;
 PRAGMA user_version = 8;
 """
 
+# T11.7 (migration 9): the coach's meal plan for a client, one template day for every day. A plan
+# names its client and the coach who wrote it, and a coach changes it by saving a new one (the
+# newest is the active one; an empty plan removes it), so neither table is ever changed in place,
+# as T9.34's lists. Each item keeps the nutrients of its grams from the USDA table when the plan
+# was saved (as meal_items do), so the store checks the day's total against the calorie floor and a
+# later reader (T11.9) works from the same numbers the coach saw. The floor is checked in code
+# (meal_plans.add_client_meal_plan()), as a CHECK cannot sum the items. A plan goes when either side
+# deletes their data (my_data.delete_user_data()). audit_log is rebuilt again, as in _V4 to _V6,
+# with the new action `meal_plan_set`.
+_V9 = """
+CREATE TABLE meal_plans (
+    id INTEGER PRIMARY KEY,
+    client_id TEXT NOT NULL REFERENCES users (id),
+    coach_id TEXT NOT NULL REFERENCES users (id),
+    created_at TEXT NOT NULL
+        CHECK (created_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T*+00:00'
+            AND date(created_at) IS substr(created_at, 1, 10)),
+    CHECK (client_id <> coach_id)
+) STRICT;
+CREATE INDEX meal_plans_client ON meal_plans (client_id);
+CREATE INDEX meal_plans_coach ON meal_plans (coach_id);
+CREATE TRIGGER meal_plans_never_changed BEFORE UPDATE ON meal_plans
+BEGIN SELECT RAISE(ABORT, 'stored records are never changed in place'); END;
+
+CREATE TABLE meal_plan_items (
+    id INTEGER PRIMARY KEY,
+    plan_id INTEGER NOT NULL REFERENCES meal_plans (id),
+    meal TEXT NOT NULL CHECK (meal IN ('breakfast', 'lunch', 'dinner', 'snack')),
+    fdc_id INTEGER NOT NULL CHECK (fdc_id > 0),
+    food_name TEXT NOT NULL CHECK (length(food_name) > 0),
+    grams REAL NOT NULL CHECK (grams > 0),
+    kcal REAL NOT NULL CHECK (kcal >= 0),
+    protein_g REAL NOT NULL CHECK (protein_g >= 0),
+    carbohydrate_g REAL NOT NULL CHECK (carbohydrate_g >= 0),
+    fat_g REAL NOT NULL CHECK (fat_g >= 0),
+    UNIQUE (plan_id, meal, fdc_id)
+) STRICT;
+CREATE INDEX meal_plan_items_plan ON meal_plan_items (plan_id);
+CREATE TRIGGER meal_plan_items_never_changed BEFORE UPDATE ON meal_plan_items
+BEGIN SELECT RAISE(ABORT, 'stored records are never changed in place'); END;
+
+CREATE TABLE audit_log_v9 (
+    id INTEGER PRIMARY KEY,
+    actor_id TEXT NOT NULL REFERENCES users (id),
+    subject_id TEXT REFERENCES users (id),
+    action TEXT NOT NULL
+        CHECK (action IN ('read', 'review_approved', 'review_edited', 'review_rejected',
+            'review_answered', 'target_set', 'suggestions_set', 'meal_plan_set')),
+    resource_type TEXT NOT NULL CHECK (length(resource_type) > 0),
+    resource_id INTEGER,
+    created_at TEXT NOT NULL
+        CHECK (created_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T*+00:00'
+            AND date(created_at) IS substr(created_at, 1, 10))
+) STRICT;
+INSERT INTO audit_log_v9 (id, actor_id, subject_id, action, resource_type, resource_id, created_at)
+SELECT id, actor_id, subject_id, action, resource_type, resource_id, created_at FROM audit_log;
+DROP TABLE audit_log;
+ALTER TABLE audit_log_v9 RENAME TO audit_log;
+CREATE INDEX audit_log_actor ON audit_log (actor_id);
+CREATE INDEX audit_log_subject ON audit_log (subject_id);
+CREATE TRIGGER audit_log_never_changed BEFORE UPDATE ON audit_log
+BEGIN SELECT RAISE(ABORT, 'stored records are never changed in place'); END;
+
+PRAGMA user_version = 9;
+"""
+
 # In order: MIGRATIONS[0] creates version 1, MIGRATIONS[1] takes it to version 2, and so on.
-MIGRATIONS: tuple[str, ...] = (_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8)
+MIGRATIONS: tuple[str, ...] = (_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9)

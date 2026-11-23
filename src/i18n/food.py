@@ -1,7 +1,11 @@
-"""The food texts: Food lookup, the meal plan check, the Today diary, suggested foods."""
+"""The food texts: lookup, the plan check, Today, suggested foods and the coach's meal plan."""
 
 from src import config
 from src.i18n.core import plain
+
+# The calorie floor as each language writes a thousand (the coach's meal plan, T11.7).
+_FLOOR_EN = f"{config.CALORIE_FLOOR_KCAL:,}"
+_FLOOR_DE = _FLOOR_EN.replace(",", ".")
 
 EN: dict[str, str] = {
     # Food lookup (tab and tool result) and the meal plan check.
@@ -102,6 +106,63 @@ EN: dict[str, str] = {
         "suggestions."
     ),
     "suggestions.share_none": "The client logged no food in the week shown.",
+    # The coach's meal plan for a client (T11.7): one template day, read-only for the gymer.
+    "meal_plan.coach_heading": "Meal plan",
+    "meal_plan.coach_intro": (
+        "One day of meals for this client, the same for every day. Each save replaces the plan "
+        "and tells the client, who reads it on their Meal plan page but logs what they really "
+        f"eat. A plan's day total is never below {_FLOOR_EN} kcal, the app's calorie floor. The "
+        "app does not check allergens or intolerances: ask your client about them."
+    ),
+    "meal_plan.not_shared": "A meal plan can be set only while the client shares nutrition.",
+    "meal_plan.draft_empty": "No foods in the plan.",
+    "meal_plan.add_row": "Add to the plan",
+    "meal_plan.remove_pick": "Food to remove from the plan",
+    "meal_plan.remove_row": "Remove from the plan",
+    "meal_plan.save": "Save the plan",
+    "meal_plan.saved": "The meal plan was saved; the client sees it on their Meal plan page.",
+    "meal_plan.remove_plan": "Remove the plan",
+    "meal_plan.removed": "The meal plan was removed; the client no longer sees one.",
+    "meal_plan.refused": "The plan was not saved: you cannot set a meal plan for this client now.",
+    "meal_plan.invalid": (
+        f"The plan was not saved: give every food a meal and an amount within range, at most "
+        f"{config.MAX_MEAL_PLAN_FOODS} foods."
+    ),
+    "meal_plan.twice": "A food is in one meal twice; remove one of them.",
+    "meal_plan.full": f"The plan holds at most {config.MAX_MEAL_PLAN_FOODS} foods.",
+    "meal_plan.empty": "Add foods before saving, or remove the plan with its own button.",
+    "meal_plan.below_floor": (
+        f"The plan was not saved: its day total is below {_FLOOR_EN} kcal, the app's calorie "
+        "floor. Add foods or grams first."
+    ),
+    "meal_plan.below_floor_draft": (
+        f"The day total is below {_FLOOR_EN} kcal, the app's calorie floor, so the plan cannot be "
+        "saved like this."
+    ),
+    "meal_plan.meal_total": (
+        "{meal} total: {kcal} kcal, {protein} g protein, {carbs} g carbohydrate, {fat} g fat."
+    ),
+    "meal_plan.total": (
+        "Day total: {kcal} kcal, {protein} g protein, {carbs} g carbohydrate, {fat} g fat."
+    ),
+    # The gymer's Meal plan page.
+    "meal_plan.gymer_intro": (
+        "The meal plan {coach} set for you: one day of meals, the same for every day. It is your "
+        "coach's advice, to read here; log what you really eat on Today."
+    ),
+    "meal_plan.not_checked": (
+        "This is your coach's plan, not the app's. The app does not check it for allergens or "
+        "intolerances, and does not check a coach's qualifications: tell your coach about any "
+        "allergy, and see a doctor for a medical diet."
+    ),
+    "meal_plan.saved_at": "Saved {when}.",
+    "meal_plan.none": "Your coach has not set a meal plan for you.",
+    "meal_plan.no_coach": (
+        "You have no meal plan. A meal plan comes from the coach you are connected with."
+    ),
+    "meal_plan.usda_note": (
+        "Energy and nutrients are worked out from the USDA table when the coach saved the plan."
+    ),
     # The Today page: the food and weight diary (T9.13).
     "today.intro": (
         "Log what you ate and your weight. A day with nothing logged shows as not logged, never "
@@ -289,6 +350,81 @@ DE: dict[str, str] = {
         "Vorschlägen eines Coachs erfasst."
     ),
     "suggestions.share_none": "Der Klient hat in der gezeigten Woche keine Lebensmittel erfasst.",
+    # Der Ernährungsplan des Coachs für einen Klienten (T11.7): ein Mustertag, für den Nutzer
+    # nur zum Lesen.
+    "meal_plan.coach_heading": "Ernährungsplan",
+    "meal_plan.coach_intro": (
+        "Ein Tag mit Mahlzeiten für diesen Klienten, gleich für jeden Tag. Jedes Speichern "
+        "ersetzt den Plan und benachrichtigt den Klienten, der ihn auf seiner Seite "
+        "Ernährungsplan liest, aber erfasst, was er wirklich isst. Die Tagessumme eines Plans "
+        f"liegt nie unter {_FLOOR_DE} kcal, der Kaloriengrenze der App. Die App prüft keine "
+        "Allergene oder Unverträglichkeiten: Fragen Sie Ihren Klienten danach."
+    ),
+    "meal_plan.not_shared": (
+        "Ein Ernährungsplan kann nur festgelegt werden, solange der Klient die Ernährung teilt."
+    ),
+    "meal_plan.draft_empty": "Keine Lebensmittel im Plan.",
+    "meal_plan.add_row": "Zum Plan hinzufügen",
+    "meal_plan.remove_pick": "Aus dem Plan zu entfernendes Lebensmittel",
+    "meal_plan.remove_row": "Aus dem Plan entfernen",
+    "meal_plan.save": "Plan speichern",
+    "meal_plan.saved": (
+        "Der Ernährungsplan wurde gespeichert; der Klient sieht ihn auf seiner Seite "
+        "Ernährungsplan."
+    ),
+    "meal_plan.remove_plan": "Plan entfernen",
+    "meal_plan.removed": "Der Ernährungsplan wurde entfernt; der Klient sieht keinen mehr.",
+    "meal_plan.refused": (
+        "Der Plan wurde nicht gespeichert: Sie können für diesen Klienten jetzt keinen "
+        "Ernährungsplan festlegen."
+    ),
+    "meal_plan.invalid": (
+        f"Der Plan wurde nicht gespeichert: Geben Sie jedem Lebensmittel eine Mahlzeit und eine "
+        f"Menge im erlaubten Bereich, höchstens {config.MAX_MEAL_PLAN_FOODS} Lebensmittel."
+    ),
+    "meal_plan.twice": (
+        "Ein Lebensmittel steht zweimal bei derselben Mahlzeit; entfernen Sie eines davon."
+    ),
+    "meal_plan.full": f"Der Plan umfasst höchstens {config.MAX_MEAL_PLAN_FOODS} Lebensmittel.",
+    "meal_plan.empty": (
+        "Fügen Sie vor dem Speichern Lebensmittel hinzu, oder entfernen Sie den Plan mit seiner "
+        "eigenen Schaltfläche."
+    ),
+    "meal_plan.below_floor": (
+        f"Der Plan wurde nicht gespeichert: Seine Tagessumme liegt unter {_FLOOR_DE} kcal, der "
+        "Kaloriengrenze der App. Fügen Sie zuerst Lebensmittel oder Gramm hinzu."
+    ),
+    "meal_plan.below_floor_draft": (
+        f"Die Tagessumme liegt unter {_FLOOR_DE} kcal, der Kaloriengrenze der App, daher kann der "
+        "Plan so nicht gespeichert werden."
+    ),
+    "meal_plan.meal_total": (
+        "Summe {meal}: {kcal} kcal, {protein} g Protein, {carbs} g Kohlenhydrate, {fat} g Fett."
+    ),
+    "meal_plan.total": (
+        "Tagessumme: {kcal} kcal, {protein} g Protein, {carbs} g Kohlenhydrate, {fat} g Fett."
+    ),
+    "meal_plan.gymer_intro": (
+        "Der Ernährungsplan, den {coach} für Sie festgelegt hat: ein Tag mit Mahlzeiten, gleich "
+        "für jeden Tag. Er ist ein Rat Ihres Coachs, hier zum Lesen; erfassen Sie unter Heute, "
+        "was Sie wirklich essen."
+    ),
+    "meal_plan.not_checked": (
+        "Das ist der Plan Ihres Coachs, nicht der App. Die App prüft ihn nicht auf Allergene oder "
+        "Unverträglichkeiten und prüft die Qualifikationen eines Coachs nicht: Sagen Sie Ihrem "
+        "Coach, wenn Sie eine Allergie haben, und wenden Sie sich für eine medizinische Diät an "
+        "eine Ärztin oder einen Arzt."
+    ),
+    "meal_plan.saved_at": "Gespeichert am {when}.",
+    "meal_plan.none": "Ihr Coach hat noch keinen Ernährungsplan für Sie festgelegt.",
+    "meal_plan.no_coach": (
+        "Sie haben keinen Ernährungsplan. Ein Ernährungsplan kommt von dem Coach, mit dem Sie "
+        "verbunden sind."
+    ),
+    "meal_plan.usda_note": (
+        "Energie und Nährstoffe werden aus der USDA-Tabelle berechnet, als der Coach den Plan "
+        "gespeichert hat."
+    ),
     # Die Seite Heute: das Ernährungs- und Gewichtstagebuch (T9.13).
     "today.intro": (
         "Tragen Sie ein, was Sie gegessen haben, und Ihr Gewicht. Ein Tag ohne Einträge gilt als "

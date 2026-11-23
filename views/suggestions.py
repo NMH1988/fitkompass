@@ -33,12 +33,12 @@ FLASH_KEY = "suggestions_flash"
 ADD_FORM_KEY = "suggestions_add"
 
 
-def _number(value: float | None) -> str:
+def nutrient(value: float | None) -> str:
     """Return a nutrient rounded to a whole number for the page, or a dash when unknown."""
     return "-" if value is None else n(round(value))
 
 
-def _item_label(item: dict) -> str:
+def item_label(item: dict) -> str:
     """Return one suggested food as text: its name, grams, energy and macros when known."""
     # The name is from the USDA table, escaped all the same, as the page renders Markdown.
     food = chat.escape_markdown(item["food_name"])
@@ -48,10 +48,10 @@ def _item_label(item: dict) -> str:
         "suggestions.item",
         food=food,
         grams=plain(item["grams"]),
-        kcal=_number(item["kcal"]),
-        protein=_number(item["protein_g"]),
-        carbs=_number(item["carbohydrate_g"]),
-        fat=_number(item["fat_g"]),
+        kcal=nutrient(item["kcal"]),
+        protein=nutrient(item["protein_g"]),
+        carbs=nutrient(item["carbohydrate_g"]),
+        fat=nutrient(item["fat_g"]),
     )
 
 
@@ -78,7 +78,7 @@ def gymer_section(user: dict, day: date, write: Callable[..., None]) -> None:
             for item in in_meal:
                 # The food on its own line, then its grams and button, so the button keeps its
                 # label in the narrow main column.
-                st.markdown(_item_label(item))
+                st.markdown(item_label(item))
                 grams_column, button_column = st.columns(2, vertical_alignment="bottom")
                 grams = grams_column.number_input(
                     t("suggestions.grams"),
@@ -203,7 +203,7 @@ def _share_line(week: dashboard.DashboardWeek) -> str:
     )
 
 
-def _target_today(user: dict, client_id: str) -> metrics.Target | None:
+def target_today(user: dict, client_id: str) -> metrics.Target | None:
     """Return the client's target active today, whichever week is shown (as the target form)."""
     # Read through the store, as a coach's read of the client's targets (nutrition, audited).
     try:
@@ -222,23 +222,23 @@ def _totals_lines(user: dict, client_id: str, rows: list[dict]) -> None:
     st.caption(
         t(
             "suggestions.total",
-            kcal=_number(total["kcal"]),
-            protein=_number(total["protein_g"]),
-            carbs=_number(total["carbohydrate_g"]),
-            fat=_number(total["fat_g"]),
+            kcal=nutrient(total["kcal"]),
+            protein=nutrient(total["protein_g"]),
+            carbs=nutrient(total["carbohydrate_g"]),
+            fat=nutrient(total["fat_g"]),
         )
     )
-    target = _target_today(user, client_id)
+    target = target_today(user, client_id)
     if target is None:
         st.caption(t("suggestions.no_target"))
         return
     st.caption(
         t(
             "suggestions.target",
-            kcal=_number(target.kcal),
-            protein=_number(target.protein_g),
-            carbs=_number(target.carbohydrate_g),
-            fat=_number(target.fat_g),
+            kcal=nutrient(target.kcal),
+            protein=nutrient(target.protein_g),
+            carbs=nutrient(target.carbohydrate_g),
+            fat=nutrient(target.fat_g),
         )
     )
 
@@ -260,7 +260,7 @@ def coach_section(user: dict, client_id: str, week: dashboard.DashboardWeek) -> 
     for meal in tables.MEALS:
         in_meal = [row for row in shown if row["meal"] == meal]
         if in_meal:
-            listed = "; ".join(_item_label(row) for row in in_meal)
+            listed = "; ".join(item_label(row) for row in in_meal)
             st.markdown(f"*{meal_label(meal)}*: {listed}")
     _totals_lines(user, client_id, shown)
     if rows:

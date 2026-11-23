@@ -41,6 +41,8 @@ TABLES = {
     "food_suggestion_lists",
     "food_suggestion_items",
     "messages",
+    "meal_plans",
+    "meal_plan_items",
 }
 NOW = "2026-10-27T10:00:00+00:00"
 DAY = "2026-10-27"
@@ -161,6 +163,18 @@ VALID_ROWS = {
         "text": "Had oats this morning.",
         "created_at": NOW,
     },
+    "meal_plans": {"client_id": "g1", "coach_id": "c1", "created_at": NOW},
+    "meal_plan_items": {
+        "plan_id": 1,
+        "meal": "lunch",
+        "fdc_id": 3,
+        "food_name": "Rice",
+        "grams": 150.0,
+        "kcal": 195.0,
+        "protein_g": 4.0,
+        "carbohydrate_g": 42.0,
+        "fat_g": 0.4,
+    },
 }
 NON_NEGATIVE = [
     ("profile_entries", "age"),
@@ -173,6 +187,10 @@ NON_NEGATIVE = [
     ("meal_items", "carbohydrate_g"),
     ("meal_items", "fat_g"),
     ("meal_items", "fiber_g"),
+    ("meal_plan_items", "kcal"),
+    ("meal_plan_items", "protein_g"),
+    ("meal_plan_items", "carbohydrate_g"),
+    ("meal_plan_items", "fat_g"),
     ("exercise_sets", "reps"),
     ("exercise_sets", "weight_kg"),
     ("exercise_sets", "rpe"),
@@ -185,6 +203,8 @@ ABOVE_ZERO = [
     ("meal_items", "fdc_id"),
     ("food_suggestion_items", "grams"),
     ("food_suggestion_items", "fdc_id"),
+    ("meal_plan_items", "grams"),
+    ("meal_plan_items", "fdc_id"),
 ]
 IMMUTABLE = [
     "profile_entries",
@@ -200,6 +220,8 @@ IMMUTABLE = [
     "food_suggestion_lists",
     "food_suggestion_items",
     "messages",
+    "meal_plans",
+    "meal_plan_items",
 ]
 
 
@@ -226,6 +248,8 @@ def _seed(conn):
     names = {row[0] for row in conn.execute("SELECT name FROM sqlite_master")}
     if "food_suggestion_lists" in names:  # from version 6 (T9.34)
         _insert(conn, "food_suggestion_lists", VALID_ROWS["food_suggestion_lists"])
+    if "meal_plans" in names:  # from version 9 (T11.7)
+        _insert(conn, "meal_plans", VALID_ROWS["meal_plans"])
 
 
 def _columns(conn, table):
@@ -241,7 +265,7 @@ def test_connect_creates_the_file_in_the_configured_folder_with_every_table(stor
         for row in store_conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
     }
     assert names == TABLES
-    assert db.schema_version(store_conn) == len(schema.MIGRATIONS) == 8
+    assert db.schema_version(store_conn) == len(schema.MIGRATIONS) == 9
 
 
 def test_the_store_folder_is_gitignored_and_inside_the_project():
@@ -479,7 +503,7 @@ def _time_columns(conn):
 def test_every_timestamp_column_refuses_a_time_that_is_not_utc(store_conn):
     """A local time, or one with another offset, is refused in every *_at column (D21)."""
     columns = _time_columns(store_conn)
-    assert len(columns) == 20  # messages.created_at since T11.3
+    assert len(columns) == 21  # meal_plans.created_at since T11.7
     _seed(store_conn)
     for table, column in columns:
         for bad in ("2026-10-27T10:00:00", "2026-10-27T10:00:00+01:00", "27.10.2026 10:00"):
@@ -661,7 +685,7 @@ def test_upgrading_a_version_7_file_adds_the_messages_table_and_keeps_the_rows(t
     path = tmp_path / "old.sqlite3"
     audit_rows = _old_file(path, 7)
     with db.connect(path) as conn:
-        assert db.schema_version(conn) == len(schema.MIGRATIONS) == 8
+        assert db.schema_version(conn) == len(schema.MIGRATIONS)
         assert conn.execute("SELECT count(*) FROM messages").fetchone()[0] == 0
         assert [tuple(row) for row in conn.execute("SELECT * FROM audit_log ORDER BY id")] == (
             audit_rows
@@ -686,6 +710,57 @@ def test_a_migration_8_that_fails_halfway_leaves_the_version_7_file_as_it_was(tm
         assert "messages" not in names
     finally:
         raw.close()
+
+
+# --- Meal plans (T11.7, migration 9) ------------------------------------------------------------
+
+
+def test_upgrading_a_version_8_file_adds_the_meal_plan_tables_and_keeps_the_rows(tmp_path):
+    """A version 8 file gets migration 9: empty plan tables, every audit row kept."""
+    path = tmp_path / "old.sqlite3"
+    audit_rows = _old_file(path, 8)
+    with db.connect(path) as conn:
+        assert db.schema_version(conn) == len(schema.MIGRATIONS) == 9
+        assert conn.execute("SELECT count(*) FROM meal_plans").fetchone()[0] == 0
+        assert conn.execute("SELECT count(*) FROM meal_plan_items").fetchone()[0] == 0
+        assert [tuple(row) for row in conn.execute("SELECT * FROM audit_log ORDER BY id")] == (
+            audit_rows
+        )
+
+
+def test_a_migration_9_that_fails_halfway_leaves_the_version_8_file_as_it_was(tmp_path):
+    """A failure after migration 9 made its tables and copied the audit rows undoes all."""
+    path = tmp_path / "old.sqlite3"
+    before = _old_file(path, 8)
+    raw = sqlite3.connect(path, autocommit=True)
+    # As for migrations 5 and 6: a view on audit_log makes the RENAME fail after the rest ran.
+    raw.execute("CREATE VIEW audit_probe AS SELECT id FROM audit_log")
+    raw.close()
+    with pytest.raises(sqlite3.OperationalError, match="audit_probe"):
+        with db.connect(path):
+            pass
+    raw = sqlite3.connect(path)
+    try:
+        assert raw.execute("PRAGMA user_version").fetchone()[0] == 8
+        sql = raw.execute("SELECT sql FROM sqlite_master WHERE name = 'audit_log'").fetchone()[0]
+        assert "suggestions_set" in sql and "meal_plan_set" not in sql
+        names = {row[0] for row in raw.execute("SELECT name FROM sqlite_master")}
+        assert not {"audit_log_v9", "meal_plans", "meal_plan_items"} & names
+        assert [tuple(row) for row in raw.execute("SELECT * FROM audit_log ORDER BY id")] == before
+    finally:
+        raw.close()
+
+
+def test_a_plan_needs_two_users_and_a_food_appears_once_per_meal(store_conn):
+    """A plan for the coach themself, or a food twice in one meal slot, is refused."""
+    _seed(store_conn)
+    with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
+        _insert(store_conn, "meal_plans", {**VALID_ROWS["meal_plans"], "client_id": "c1"})
+    _insert(store_conn, "meal_plan_items", VALID_ROWS["meal_plan_items"])
+    with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
+        _insert(store_conn, "meal_plan_items", VALID_ROWS["meal_plan_items"])
+    with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
+        _insert(store_conn, "meal_plan_items", {**VALID_ROWS["meal_plan_items"], "meal": "brunch"})
 
 
 # --- A second process: write-ahead log mode and the busy timeout (T11.3, D24) ---------------------
@@ -1163,16 +1238,18 @@ def test_the_rebuilt_audit_table_is_v1_s_apart_from_the_action_list(store_conn):
 def test_the_audit_check_and_access_action_list_the_same_actions(store_conn):
     """A new action is added in both places, or neither."""
     assert set(_check_actions(store_conn)) == set(get_args(access.Action))
-    assert {"review_answered", "target_set", "suggestions_set"} <= set(get_args(access.Action))
+    assert {"review_answered", "target_set", "suggestions_set", "meal_plan_set"} <= set(
+        get_args(access.Action)
+    )
 
 
-@pytest.mark.parametrize("migrations", [1, 2, 3, 4, 5, 6, 7])
+@pytest.mark.parametrize("migrations", [1, 2, 3, 4, 5, 6, 7, 8])
 def test_upgrading_an_older_file_keeps_every_audit_row_index_and_trigger(tmp_path, migrations):
-    """A version 1 to 7 file with audit rows reaches version 8, its rows, IDs and guards kept."""
+    """A version 1 to 8 file with audit rows reaches version 9, its rows, IDs and guards kept."""
     path = tmp_path / "old.sqlite3"
     before = _old_file(path, migrations)
     with db.connect(path) as conn:
-        assert db.schema_version(conn) == len(schema.MIGRATIONS) == 8
+        assert db.schema_version(conn) == len(schema.MIGRATIONS) == 9
         after = [tuple(row) for row in conn.execute("SELECT * FROM audit_log ORDER BY id")]
         assert after == before
         indexes = {
@@ -1185,6 +1262,7 @@ def test_upgrading_an_older_file_keeps_every_audit_row_index_and_trigger(tmp_pat
         _insert(conn, "audit_log", {**VALID_ROWS["audit_log"], "action": "review_answered"})
         _insert(conn, "audit_log", {**VALID_ROWS["audit_log"], "action": "target_set"})
         _insert(conn, "audit_log", {**VALID_ROWS["audit_log"], "action": "suggestions_set"})
+        _insert(conn, "audit_log", {**VALID_ROWS["audit_log"], "action": "meal_plan_set"})
         with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
             _insert(conn, "audit_log", {**VALID_ROWS["audit_log"], "action": "deleted"})
         assert conn.execute("PRAGMA foreign_key_check").fetchall() == []

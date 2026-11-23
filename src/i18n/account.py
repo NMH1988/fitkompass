@@ -74,20 +74,21 @@ EN: dict[str, str] = {
     "account.no_target": "No daily target could be worked out from these details.",
     "my_data.intro_gymer": (
         "Everything the app stores about you: your account and your records below; your coach "
-        "relationships, sharing choices, the foods your coaches suggested to you, your questions "
-        "to the coach with the answers, your messages with your coaches (both sides' messages), "
-        "your coach's reads of your data and your notification read mark (when you last marked "
-        "your notifications as read) are in the export. Reading your messages is not recorded, "
-        "for you or your coach, so those reads are not in the export."
+        "relationships, sharing choices, the foods your coaches suggested to you, the meal plans "
+        "your coaches set for you, your questions to the coach with the answers, your messages "
+        "with your coaches (both sides' messages), your coach's reads of your data and your "
+        "notification read mark (when you last marked your notifications as read) are in the "
+        "export. Reading your messages is not recorded, for you or your coach, so those reads are "
+        "not in the export."
     ),
     "my_data.intro_coach": (
         "Everything the app stores about you: your account, the working preferences you saved in "
         "the chat, your clients, their reviews and the questions and answers under them once you "
         "have some, your messages with your clients (both sides' messages, former clients' "
         "too), and your notification read mark (when you last marked your notifications as "
-        "read); they are in the export. The foods you suggest to a client are stored as the "
-        "client's data: your export holds when you saved each list. Nothing else of your chats "
-        "with the AI is stored."
+        "read); they are in the export. The foods you suggest to a client and the meal plans you "
+        "set for them are stored as the client's data: your export holds when you saved each "
+        "list and plan. Nothing else of your chats with the AI is stored."
     ),
     "my_data.account": "**Account:** {name} · {role} · created {created}",
     "my_data.count": "{count} stored",
@@ -149,7 +150,8 @@ EN: dict[str, str] = {
     # T9.16: what a weekly review sends, as the gymer agrees to it by ticking a scope.
     "scope_help.nutrition": (
         "Food log, daily targets, the foods your coach suggests (and how much you log from them "
-        "while you share) and the weekly reviews your coach approves. When your coach "
+        "while you share), the meal plan your coach sets for you and the weekly reviews your "
+        "coach approves. When your coach "
         "starts a weekly review, this week's figures (averages and totals, not your name or "
         "foods) go to an AI model through OpenRouter, which drafts the review"
     ),
@@ -297,13 +299,14 @@ DE: dict[str, str] = {
     ),
     "account.no_target": "Aus diesen Angaben ließ sich kein Tagesziel berechnen.",
     "my_data.intro_gymer": (
-        "Alles, was die App über Sie speichert: Ihr Konto und unten Ihre Einträge; Ihre "
-        "Coach-Beziehungen, Ihre Freigaben, die Lebensmittel, die Ihre Coachs Ihnen vorgeschlagen "
-        "haben, Ihre Fragen an den Coach mit den Antworten, Ihre Nachrichten mit Ihren Coachs "
-        "(die beider Seiten), die Zugriffe Ihres Coachs auf Ihre Daten und Ihre Lesemarkierung "
-        "der Benachrichtigungen (wann Sie sie zuletzt als gelesen markiert haben) stehen im "
-        "Export. Das Lesen Ihrer Nachrichten wird nicht aufgezeichnet, weder bei Ihnen noch bei "
-        "Ihrem Coach, daher steht es nicht im Export."
+        "Alles, was die App über Sie speichert: Ihr Konto und unten Ihre Einträge; Ihre Coach- "
+        "Beziehungen, Ihre Freigaben, die Lebensmittel, die Ihre Coachs Ihnen vorgeschlagen haben, "
+        "die Ernährungspläne, die Ihre Coachs für Sie festgelegt haben, Ihre Fragen an den Coach "
+        "mit den Antworten, Ihre Nachrichten mit Ihren Coachs (die beider Seiten), die Zugriffe "
+        "Ihres Coachs auf Ihre Daten und Ihre Lesemarkierung der Benachrichtigungen (wann Sie sie "
+        "zuletzt als gelesen markiert haben) stehen im Export. Das Lesen Ihrer Nachrichten wird "
+        "nicht aufgezeichnet, weder bei Ihnen noch bei Ihrem Coach, daher steht es nicht im "
+        "Export."
     ),
     "my_data.intro_coach": (
         "Alles, was die App über Sie speichert: Ihr Konto, die Arbeitsvorlieben, die Sie im Chat "
@@ -311,8 +314,9 @@ DE: dict[str, str] = {
         "sobald Sie welche haben, Ihre Nachrichten mit Ihren Kunden (die beider Seiten, auch mit "
         "früheren Kunden) und Ihre Lesemarkierung der Benachrichtigungen (wann Sie sie zuletzt "
         "als gelesen markiert haben); sie stehen im Export. Die Lebensmittel, die Sie "
-        "einem Klienten vorschlagen, werden als Daten des Klienten gespeichert: Ihr Export "
-        "enthält, wann Sie jede Liste gespeichert haben. Sonst wird von Ihren Chats mit der KI "
+        "einem Klienten vorschlagen, und die Ernährungspläne, die Sie für ihn festlegen, werden "
+        "als Daten des Klienten gespeichert: Ihr Export enthält, wann Sie jede Liste und jeden "
+        "Plan gespeichert haben. Sonst wird von Ihren Chats mit der KI "
         "nichts gespeichert."
     ),
     "my_data.account": "**Konto:** {name} · {role} · angelegt am {created}",
@@ -376,7 +380,8 @@ DE: dict[str, str] = {
     "scope.body": "Körper",
     "scope_help.nutrition": (
         "Ernährungstagebuch, Tagesziele, die Lebensmittel, die Ihr Coach vorschlägt (und wie viel "
-        "Sie davon erfassen, solange Sie teilen), und die Wochenberichte, die Ihr Coach freigibt. "
+        "Sie davon erfassen, solange Sie teilen), der Ernährungsplan, den Ihr Coach für Sie "
+        "festlegt, und die Wochenberichte, die Ihr Coach freigibt. "
         "Wenn Ihr "
         "Coach einen Wochenbericht startet, gehen die Zahlen dieser Woche (Durchschnitte und "
         "Summen, nicht Ihr Name oder Ihre Lebensmittel) über OpenRouter an ein KI-Modell, das "

@@ -7,8 +7,8 @@ guest) when sign-in is set up or in demo mode. A guest (a copy with no [auth]) h
 chat with today's tabs, so no menu shows. A user signed in with Google who has no account yet
 ("pending") sees only the welcome page. A coach has the chat, Clients (T9.12), Client week
 (T9.15), Notifications (T9.29) and My data; a gymer My profile, Today (the food and weight diary,
-T9.13), Workouts (T9.14), My week (T9.15), Coach and sharing (T9.12), Notifications (T9.29) and My
-data, no chat (T9.24).
+T9.13), Meal plan (T11.7), Workouts (T9.14), My week (T9.15), Coach and sharing (T9.12),
+Notifications (T9.29) and My data, no chat (T9.24).
 """
 
 import streamlit as st
@@ -17,6 +17,7 @@ from views import (
     account,
     client_week,
     clients,
+    meal_plan,
     my_data,
     my_week,
     notifications,
@@ -36,6 +37,7 @@ SHARING = sharing.URL_PATH
 WORKOUTS = workouts.URL_PATH
 CLIENT_WEEK = client_week.URL_PATH
 MY_WEEK = my_week.URL_PATH
+MEAL_PLAN = meal_plan.URL_PATH
 NOTIFICATIONS = notifications.URL_PATH
 WELCOME = "welcome"
 START = "start"
@@ -48,9 +50,9 @@ PAGES_BY_ROLE: dict[str | None, tuple[str, ...]] = {
     # Both roles have the Notifications page before My data (T9.29).
     "coach": (CHAT, CLIENTS, CLIENT_WEEK, NOTIFICATIONS, MY_DATA),
     # No chat for a gymer (T9.24): the profile, the diary (T9.13; the profile stays the home), the
-    # workouts (T9.14), the coach (T9.12), their week with the approved reviews (T9.15) and their
-    # data.
-    "gymer": (PROFILE, TODAY, WORKOUTS, MY_WEEK, SHARING, NOTIFICATIONS, MY_DATA),
+    # workouts (T9.14), the coach (T9.12), their week with the approved reviews (T9.15), their
+    # coach's meal plan (T11.7, read-only, after Today) and their data.
+    "gymer": (PROFILE, TODAY, MEAL_PLAN, WORKOUTS, MY_WEEK, SHARING, NOTIFICATIONS, MY_DATA),
 }
 _PAGES = {
     CHAT: (pages.chat_page, "page.chat", ":material/chat:"),
@@ -61,6 +63,7 @@ _PAGES = {
     WORKOUTS: (workouts.page, "page.workouts", ":material/fitness_center:"),
     CLIENT_WEEK: (client_week.page, "page.client_week", ":material/calendar_month:"),
     MY_WEEK: (my_week.page, "page.my_week", ":material/calendar_month:"),
+    MEAL_PLAN: (meal_plan.page, "page.meal_plan", ":material/menu_book:"),
     NOTIFICATIONS: (notifications.page, "page.notifications", notifications.ICON),
     MY_DATA: (my_data.page, "page.my_data", ":material/folder_shared:"),
     WELCOME: (account.welcome_page, "page.welcome", ":material/waving_hand:"),

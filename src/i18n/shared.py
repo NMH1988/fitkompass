@@ -125,6 +125,7 @@ EN: dict[str, str] = {
     # The dashboards (T9.15): the coach's client list and client week, the gymer's My week.
     "page.client_week": "Client week",
     "page.my_week": "My week",
+    "page.meal_plan": "Meal plan",  # T11.7: the gymer's read-only plan
 }
 
 DE: dict[str, str] = {
@@ -262,4 +263,5 @@ DE: dict[str, str] = {
     # Die Übersichten (T9.15).
     "page.client_week": "Klientenwoche",
     "page.my_week": "Meine Woche",
+    "page.meal_plan": "Ernährungsplan",
 }

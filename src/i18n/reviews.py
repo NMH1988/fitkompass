@@ -18,9 +18,9 @@ EN: dict[str, str] = {
     "notifications.intro_gymer": (
         "What changed with your coach: when you connected, when a coach approved a weekly review "
         "about you or answered your question under one, when your coach updated the foods they "
-        "suggest, the newest message a coach (also a former one) sent you, and when a "
-        "relationship ended. A notification never shows the text of a review, a question, an "
-        "answer or a message, or a food. New ones appear the next time a page loads."
+        "suggest or your meal plan, the newest message a coach (also a former one) sent you, and "
+        "when a relationship ended. A notification never shows the text of a review, a question, "
+        "an answer or a message, or a food. New ones appear the next time a page loads."
     ),
     "notifications.read_note": (
         "Mark all as read stores one mark with the time this list was loaded. Only you see it; "
@@ -47,6 +47,8 @@ EN: dict[str, str] = {
     ),
     # T9.34: never a food or an amount.
     "notifications.suggestions_updated": "{name} updated the foods they suggest to you.",
+    # T11.7: never a food or an amount; an empty plan (the plan removed) reads the same.
+    "notifications.meal_plan_updated": "{name} updated your meal plan.",
     # T11.3: one per thread, the newest message only; never its text.
     "notifications.message_received": "{name} sent you a message.",
     # Questions to the coach under an approved review (T9.25): never sent to a model.
@@ -218,10 +220,11 @@ DE: dict[str, str] = {
     "notifications.intro_gymer": (
         "Was sich bei Ihrem Coach geändert hat: wann Sie sich verbunden haben, wann ein Coach "
         "einen Wochenbericht über Sie freigegeben oder Ihre Frage dazu beantwortet hat, wann Ihr "
-        "Coach die vorgeschlagenen Lebensmittel geändert hat, die neueste Nachricht eines Coachs "
-        "(auch eines früheren) an Sie und wann eine Verbindung beendet wurde. Eine "
-        "Benachrichtigung zeigt nie den Text eines Berichts, einer Frage, einer Antwort oder einer "
-        "Nachricht und kein Lebensmittel. Neue erscheinen, wenn eine Seite das nächste Mal lädt."
+        "Coach die vorgeschlagenen Lebensmittel oder Ihren Ernährungsplan geändert hat, die "
+        "neueste Nachricht eines Coachs (auch eines früheren) an Sie und wann eine Verbindung "
+        "beendet wurde. Eine Benachrichtigung zeigt nie den Text eines Berichts, einer Frage, "
+        "einer Antwort oder einer Nachricht und kein Lebensmittel. Neue erscheinen, wenn eine "
+        "Seite das nächste Mal lädt."
     ),
     "notifications.read_note": (
         "„Alle als gelesen markieren“ speichert eine Markierung mit der Zeit, zu der diese Liste "
@@ -251,6 +254,7 @@ DE: dict[str, str] = {
         "{name} hat Ihre Frage zum Wochenbericht für die Woche vom {week} beantwortet."
     ),
     "notifications.suggestions_updated": "{name} hat die vorgeschlagenen Lebensmittel geändert.",
+    "notifications.meal_plan_updated": "{name} hat Ihren Ernährungsplan geändert.",
     "notifications.message_received": "{name} hat Ihnen eine Nachricht geschickt.",
     "questions.heading": "Fragen an den Coach",
     "questions.note": (
