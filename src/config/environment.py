@@ -49,7 +49,7 @@ COOKIE_SECRET_PLACEHOLDER = "replace-with-a-long-random-secret-for-the-cookie"
 # secrets.toml or the environment and there is no [auth] section. Off by default.
 DEMO_MODE_NAME = "DEMO_MODE"
 DEMO_MODE_ON_VALUES = frozenset({"1", "true", "yes", "on"})
-# The chat server's token secret (T11.4a, D24): it signs the tokens the page mints and the server
+# The chat socket's token secret (T11.4a, D24): it signs the tokens the page mints and the socket
 # checks. In its own [chat] section (so Streamlit does not copy it into os.environ), or the
 # environment variable; read only by chat_token_secret(), never logged, shown or put in an error.
 CHAT_SECTION = "chat"

@@ -56,9 +56,10 @@ EVENTS = frozenset(
         # The chat's memory did not keep an answer that reads like an instruction (T10.1): the
         # turn's ID only; never the question, the answer or the pattern that matched.
         "memory_answer_dropped",
-        # The chat server (T11.4a): a socket accepted, refused or closed (its status and a fixed
-        # reason code), a message stored or refused (its status), and an error inside the server
-        # (its diagnostic); never the text, the token, the user, the thread or the client's address.
+        # The chat socket (T11.4a): a socket accepted, refused or closed (its status and a fixed
+        # reason code), a message stored or refused (its status), and an error inside the
+        # socket's handler (its diagnostic); never the text, the token, the user, the thread or
+        # the client's address.
         "chat_connection",
         "chat_message",
         "chat_error",
