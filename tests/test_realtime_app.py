@@ -72,7 +72,7 @@ def _forged(token: str) -> str:
     """Return the token with one signature character changed, so it never verifies."""
     # The second-to-last character holds only signature bits (the last also holds padding bits the
     # decoder ignores), and it always changes: a fixed "AA" ending left a token that already ended
-    # in "AA" valid, about once in 4096 runs.
+    # in "AA" valid, about once in 1024 tokens.
     return token[:-2] + ("B" if token[-2] == "A" else "A") + token[-1]
 
 
