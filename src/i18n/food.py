@@ -156,6 +156,10 @@ EN: dict[str, str] = {
         "allergy, and see a doctor for a medical diet."
     ),
     "meal_plan.saved_at": "Saved {when}.",
+    "meal_plan.profile_first": (
+        "Save your details on My profile first: the app is for adults, and your age is checked "
+        "there. Then your coach's meal plan shows here."
+    ),
     "meal_plan.none": "Your coach has not set a meal plan for you.",
     "meal_plan.no_coach": (
         "You have no meal plan. A meal plan comes from the coach you are connected with."
@@ -416,6 +420,10 @@ DE: dict[str, str] = {
         "eine Ärztin oder einen Arzt."
     ),
     "meal_plan.saved_at": "Gespeichert am {when}.",
+    "meal_plan.profile_first": (
+        "Speichern Sie zuerst Ihre Angaben unter Mein Profil: Die App ist für Erwachsene, und Ihr "
+        "Alter wird dort geprüft. Danach erscheint hier der Ernährungsplan Ihres Coachs."
+    ),
     "meal_plan.none": "Ihr Coach hat noch keinen Ernährungsplan für Sie festgelegt.",
     "meal_plan.no_coach": (
         "Sie haben keinen Ernährungsplan. Ein Ernährungsplan kommt von dem Coach, mit dem Sie "

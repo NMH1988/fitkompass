@@ -4,7 +4,8 @@ The coach builds a plan on Client week only while the client shares nutrition: i
 slot and for the day show next to the client's target, a day below the calorie floor is refused,
 and "Remove the plan" saves an empty one. The gymer reads their current coach's plan, read-only,
 on the Meal plan page, which says it is the coach's plan, that the app checks neither allergens
-nor the coach's qualifications, and credits the USDA data; it is hidden once the relationship ends.
+nor the coach's qualifications, and credits the USDA data; it is hidden once the relationship ends,
+and until the gymer has saved a profile (the 18+ check).
 """
 
 import pytest
@@ -138,6 +139,32 @@ def test_a_gymer_without_a_coach_has_no_plan(monkeypatch):
     store_account("gymer", profile=PROFILE)
     text = _page_text(_meal_plan_page(monkeypatch))
     assert "A meal plan comes from the coach you are connected with." in text
+
+
+@pytest.fixture
+def coached_without_profile():
+    """Store the canary gymer with no saved profile, a coach sharing nutrition and their plan."""
+    store_account("gymer")
+    with db.connect() as conn:
+        users.create_user(conn, COACH, "coach", "Coach Kai")
+        relationship = users.start_relationship(conn, COACH, USER_ID)
+        users.set_consent(conn, USER_ID, relationship, "nutrition", True)
+        _save(conn, COACH, USER_ID, ("breakfast", PECANS, 150.0), ("dinner", POLLOCK, 250.0))
+
+
+@pytest.mark.usefixtures("coached_without_profile")
+@pytest.mark.parametrize(
+    ("language", "notice"),
+    [
+        ("en", "Save your details on My profile first: the app is for adults"),
+        ("de", "Speichern Sie zuerst Ihre Angaben unter Mein Profil: Die App ist für Erwachsene"),
+    ],
+)
+def test_the_plan_shows_only_after_the_gymer_saved_a_profile(monkeypatch, language, notice):
+    """No declared age yet (the profile's 18+ check): the page asks for it and hides the plan."""
+    text = _page_text(_meal_plan_page(monkeypatch, language))
+    assert notice in text
+    assert PECANS not in text and "Coach Kai" not in text
 
 
 def test_the_gymer_is_told_of_a_new_plan_on_the_notifications_page(monkeypatch, coached):

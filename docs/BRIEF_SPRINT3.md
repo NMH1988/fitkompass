@@ -53,7 +53,7 @@ The reviewer's five points, each with the ticket that answers it:
 Comments the owner received on the Sprint 3 project before its deadline, in our words (the owner keeps the original), each with the ticket that answers it:
 
 1. **LangSmith is little used** (2026-11-12): the project traces to LangSmith (T9.8), but every trace is masked, so LangSmith shows only the shape of a turn, and the evaluation never reaches it. **T9.33** (the evaluation as LangSmith experiments, and the evaluation lifecycle documented in `docs/TESTING.md`); **T9.35** (unmasked traces of the app's own runs in demo mode only, so a reviewer can read what a trace holds).
-2. **A gymer chooses every food alone** (2026-11-12): letting the gymer choose every food is weak; the coach should recommend foods to the gymer. **T9.34** (foods the coach suggests, logged by the client in one click; beyond the brief, owner's request), after a comparison of similar coaching apps the same day; a coach-built meal plan stays a Capstone idea (`docs/PRD.md`, "Moved to the Capstone").
+2. **A gymer chooses every food alone** (2026-11-12): letting the gymer choose every food is weak; the coach should recommend foods to the gymer. **T9.34** (foods the coach suggests, logged by the client in one click; beyond the brief, owner's request), after a comparison of similar coaching apps the same day; and in the Capstone **T11.7** (the coach's meal plan for a client: one template day the coach builds on Client week, never below the calorie floor, which the gymer reads on their Meal plan page; `docs/PRD.md` feature 32).
 
 ## The Sprint 3 review: areas for improvement
 

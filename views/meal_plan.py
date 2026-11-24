@@ -6,7 +6,8 @@ grams) added and removed in a draft before saving. The draft's totals per meal s
 show next to the client's target active today, and a plan whose day total is below the calorie
 floor is refused, in the draft and by the store. Each save is a new plan that replaces the last;
 "Remove the plan" saves an empty one. The gymer reads the active plan (the newest one their current
-coach saved) on their own Meal plan page, read-only: nothing is logged from it. Every read and
+coach saved) on their own Meal plan page, read-only: nothing is logged from it, and it shows only
+once the gymer has saved a profile (whose first Save carries the 18+ check). Every read and
 write goes through the store with the session's own user ID (`views/account.py`), and nothing here
 reaches a model.
 """
@@ -262,9 +263,13 @@ def coach_section(user: dict, client_id: str, week: dashboard.DashboardWeek) -> 
 # --- The gymer's Meal plan page ------------------------------------------------------------------
 
 
-def _read_own(user_id: str) -> tuple[dict | None, str | None, bool]:
-    """Return the gymer's active plan, its coach's name and whether they have a coach now."""
+def _read_own(user_id: str) -> tuple[dict | None, str | None, bool] | None:
+    """Return the gymer's plan, its coach's name and whether they have a coach; None: no profile."""
     with accounts.open_store(account.store_path()) as conn:
+        # The first Save on My profile carries the 18+ check, so a plan, a whole day's eating,
+        # shows only to a gymer who has declared their age (as the diary needs the profile first).
+        if not accounts.has_profile_entries(conn, user_id):
+            return None
         plan = store_plans.current_meal_plan(conn, user_id, user_id)
         has_coach = any(
             row["status"] == "active" for row in users.list_relationships(conn, user_id)
@@ -283,12 +288,16 @@ def page() -> None:
             return  # not registered for them (views/navigation.py); never reached
         st.subheader(t("page.meal_plan"))
         try:
-            plan, coach_name, has_coach = _read_own(user["id"])
+            found = _read_own(user["id"])
         except accounts.StoreUnavailable:
             st.error(t("account.store_unavailable"), icon=":material/error:")
             return
-        except NotFound:
+        except NotFound, accounts.AccountError:
             return  # the account was deleted in another tab: the next run shows the welcome page
+        if found is None:
+            st.info(t("meal_plan.profile_first"), icon=":material/person:")
+            return
+        plan, coach_name, has_coach = found
         if not has_coach:
             st.caption(t("meal_plan.no_coach"))
             return

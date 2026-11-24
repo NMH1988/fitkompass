@@ -2,8 +2,9 @@
 
 The coach sets a client's targets only while the client shares nutrition, and a write the store
 refuses after the page was drawn shows one fixed message. The gymer sees the coach's target on My
-profile, marked as set by the coach, with no control to change it; My data lists it as "Your coach"
-and offers no delete for it alone, while "Delete everything" still removes it (AC-34).
+profile, once they have saved a profile (T11.7), marked as set by the coach, with no control to
+change it; My data lists it as "Your coach" and offers no delete for it alone, while "Delete
+everything" still removes it (AC-34).
 """
 
 from datetime import date
@@ -194,7 +195,7 @@ def test_the_form_in_german(monkeypatch):
 
 @pytest.fixture
 def coached_gymer():
-    """Store the canary gymer with a saved profile, a coach sharing nutrition and their target."""
+    """Store the canary gymer (no profile saved), a coach sharing nutrition and their target."""
     store_account("gymer", profile=None)
     with db.connect() as conn:
         users.create_user(conn, COACH, "coach", "Coach Kai")
@@ -213,7 +214,7 @@ def coached_gymer():
         records.add_client_target(conn, COACH, USER_ID, **COACH_TARGET, effective_from=TODAY)
 
 
-def test_the_gymer_sees_the_coach_s_target_on_my_profile(monkeypatch, coached_gymer):
+def test_the_gymer_sees_the_coach_s_target_on_my_profile(monkeypatch, coached_gymer_with_profile):
     """Marked as set by the coach, read-only: no field or button for it (criterion 8)."""
     at = open_page(start(monkeypatch, user=signed_in()), navigation.PROFILE)
     [notice] = [item.value for item in at.info if "Your coach set" in item.value]
@@ -221,10 +222,48 @@ def test_the_gymer_sees_the_coach_s_target_on_my_profile(monkeypatch, coached_gy
     assert not [item for item in at.number_input if item.key.startswith("client_targets_")]
 
 
-def test_the_notice_in_german(monkeypatch, coached_gymer):
+def test_the_notice_in_german(monkeypatch, coached_gymer_with_profile):
     """The gymer's notice is German when German is chosen."""
     at = open_page(start(monkeypatch, user=signed_in(), language="de"), navigation.PROFILE)
     assert [item for item in at.info if "Ihr Coach hat Ihr Tagesziel" in item.value]
+
+
+@pytest.fixture
+def coached_without_profile():
+    """Store a gymer with no profile and only the coach's target, so no other target can show."""
+    store_account("gymer")
+    with db.connect() as conn:
+        users.create_user(conn, COACH, "coach", "Coach Kai")
+        relationship = users.start_relationship(conn, COACH, USER_ID)
+        users.set_consent(conn, USER_ID, relationship, "nutrition", True)
+        records.add_client_target(conn, COACH, USER_ID, **COACH_TARGET, effective_from=TODAY)
+
+
+@pytest.mark.usefixtures("coached_without_profile")
+@pytest.mark.parametrize("language", ["en", "de"])
+def test_no_coach_target_before_the_gymer_saved_a_profile(monkeypatch, language):
+    """No declared age yet (T11.7): My profile shows no coach's target, in either language."""
+    at = open_page(start(monkeypatch, user=signed_in(), language=language), navigation.PROFILE)
+    shown = " ".join(str(item.value) for item in [*at.info, *at.caption, *at.markdown])
+    assert "Your coach set" not in shown and "Ihr Coach hat Ihr Tagesziel" not in shown
+    assert "2,100" not in shown and "2.100" not in shown
+
+
+@pytest.mark.usefixtures("coached_without_profile")
+@pytest.mark.parametrize(
+    ("language", "notice"),
+    [
+        ("en", "Save your details on My profile first: the app is for adults"),
+        ("de", "Speichern Sie zuerst Ihre Angaben unter Mein Profil: Die App ist für Erwachsene"),
+    ],
+)
+def test_my_week_asks_for_the_profile_before_showing_a_target(monkeypatch, language, notice):
+    """No declared age yet (T11.7): My week asks for the profile and shows no week or target."""
+    at = open_page(start(monkeypatch, user=signed_in(), language=language), navigation.MY_WEEK)
+    assert [item for item in at.info if notice in item.value]
+    shown = " ".join(str(item.value) for item in [*at.caption, *at.markdown])
+    assert "2,100" not in shown and "2.100" not in shown
+    assert not at.date_input  # no week picker
 
 
 def test_no_notice_when_the_active_target_is_the_gymer_s_own(monkeypatch):
@@ -314,7 +353,7 @@ def test_a_dialog_save_keeps_the_coach_s_target_and_says_so(monkeypatch):
         ("de", "Die App prüft die Qualifikationen eines Coaches nicht."),
     ],
 )
-@pytest.mark.usefixtures("coached_gymer")
+@pytest.mark.usefixtures("coached_gymer_with_profile")
 def test_the_coach_s_target_says_qualifications_are_not_checked(monkeypatch, language, unverified):
     """Under the coach's target, the app says it does not check coaches (compliance run 1)."""
     at = open_page(start(monkeypatch, user=signed_in(), language=language), navigation.PROFILE)

@@ -150,6 +150,10 @@ EN: dict[str, str] = {
     "client_week.no_clients": (
         "You have no active clients. Invite one on the Clients page, then open their week here."
     ),
+    "my_week.profile_first": (
+        "Save your details on My profile first: the app is for adults, and your age is checked "
+        "there. Then your week and your targets show here."
+    ),
     "my_week.intro": (
         "Your week: what you logged on Today and Workouts, and the weekly reviews a coach "
         "approved. This page only shows them; you log and change entries on those pages."
@@ -372,6 +376,10 @@ DE: dict[str, str] = {
     "client_week.no_clients": (
         "Sie haben keine aktiven Klienten. Laden Sie auf der Seite Klienten jemanden ein und "
         "öffnen Sie dann hier seine Woche."
+    ),
+    "my_week.profile_first": (
+        "Speichern Sie zuerst Ihre Angaben unter Mein Profil: Die App ist für Erwachsene, und Ihr "
+        "Alter wird dort geprüft. Danach erscheinen hier Ihre Woche und Ihre Ziele."
     ),
     "my_week.intro": (
         "Ihre Woche: was Sie unter Heute und Training erfasst haben, und die freigegebenen "
