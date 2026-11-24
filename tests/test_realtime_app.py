@@ -68,6 +68,14 @@ def _token(user: str, thread: int, **kwargs) -> str:
     return tokens.mint(user, thread, SECRET, **kwargs)
 
 
+def _forged(token: str) -> str:
+    """Return the token with one signature character changed, so it never verifies."""
+    # The second-to-last character holds only signature bits (the last also holds padding bits the
+    # decoder ignores), and it always changes: a fixed "AA" ending left a token that already ended
+    # in "AA" valid, about once in 4096 runs.
+    return token[:-2] + ("B" if token[-2] == "A" else "A") + token[-1]
+
+
 def _auth(token: object, after_id: object = 0) -> dict:
     """Return an auth frame."""
     return {"type": "auth", "token": token, "after_id": after_id}
@@ -351,7 +359,7 @@ def test_a_bad_renewal_closes_the_socket(client, relationships, who):
         "another user": _token(world.SHARED, thread),
         "another thread": _token(world.COACH_A, relationships[world.UNSHARED]),
         "expired": _token(world.COACH_A, thread, now=time.time() - 10**4),
-        "forged": _token(world.COACH_A, thread)[:-2] + "AA",
+        "forged": _forged(_token(world.COACH_A, thread)),
     }[who]
     with _open(client, world.COACH_A, thread) as (coach, _):
         coach.send_json(_auth(renewal))
@@ -623,7 +631,7 @@ def test_the_log_lines_hold_no_text_token_user_or_thread(client, relationships, 
             gymer.send_json({"type": "send", "text": ""})
             gymer.receive_json()
         with client.websocket_connect(PATH, headers={"origin": ORIGIN}) as bad:
-            bad.send_json(_auth(token[:-2] + "AA"))
+            bad.send_json(_auth(_forged(token)))
             _closed_with(bad)
     text = log_stream.getvalue()
     lines = [json.loads(line) for line in text.splitlines()]
