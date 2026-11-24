@@ -196,6 +196,15 @@ EN: dict[str, str] = {
     ),
     "sharing.refused.limit": "You have tried {attempts} codes today. Please try again tomorrow.",
     "sharing.refused.has_coach": "You have a coach already. End that relationship first.",
+    "sharing.refused.no_profile": (
+        "Save your details on My profile first, then enter the code again."
+    ),
+    "sharing.profile_first": (
+        "This app is for adults, so a coach can connect with you only after you have saved your "
+        "details, with your age, on My profile. Saving them first does not use up a code from "
+        "your coach: it works until it expires or your coach cancels it."
+    ),
+    "sharing.profile_link": "Go to My profile",
     "sharing.coach": "**Your coach:** {name} · since {since}",
     "sharing.what": "What your coach sees",
     "sharing.save": "Save sharing",
@@ -434,6 +443,17 @@ DE: dict[str, str] = {
     "sharing.refused.has_coach": (
         "Sie haben bereits einen Coach. Beenden Sie zuerst diese Verbindung."
     ),
+    "sharing.refused.no_profile": (
+        "Speichern Sie zuerst Ihre Angaben unter Mein Profil und geben Sie den Code dann erneut "
+        "ein."
+    ),
+    "sharing.profile_first": (
+        "Diese App ist für Erwachsene, deshalb kann sich ein Coach erst mit Ihnen verbinden, wenn "
+        "Sie Ihre Angaben mit Ihrem Alter unter Mein Profil gespeichert haben. Ein Code Ihres "
+        "Coaches wird dadurch nicht verbraucht: Er gilt, bis er abläuft oder Ihr Coach ihn "
+        "zurückzieht."
+    ),
+    "sharing.profile_link": "Zu Mein Profil",
     "sharing.coach": "**Ihr Coach:** {name} · seit {since}",
     "sharing.what": "Was Ihr Coach sieht",
     "sharing.save": "Freigaben speichern",
