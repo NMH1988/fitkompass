@@ -855,6 +855,15 @@ def _store_scenario(conn, codes: list[str]) -> list[Exception]:
     codes.append(invitation.code)
     codes.append(invitation.code.replace("-", ""))
     invitations.list_invitations(conn, "CANARY-COACH")
+    # T11.17: before a saved profile even the valid code is refused, logged by reason only.
+    try:
+        sharing.accept_code(conn, "CANARY-NEW", invitation.code, ["body"])
+    except invitations.InvitationRefused as error:
+        errors.append(error)
+    records.add_profile_entry(
+        conn, "CANARY-NEW", height_cm=day.height_cm, age=day.age, sex=day.sex,
+        activity=day.activity, goal=day.goal,
+    )  # fmt: skip
     for typed, gymer in (("CANA-RYCA-NARY", "CANARY-NEW"), (invitation.code, "CANARY-GYM")):
         try:
             sharing.accept_code(conn, gymer, typed, ["body"])
@@ -1084,11 +1093,12 @@ def test_no_record_or_error_holds_a_stored_value(store_conn, caplog):
     # Each kind of refusal happened, so their messages were checked.
     # T9.7: a gymer's preference is refused; T9.17: two targets; T9.25: three refused thread writes;
     # T9.30: one refused read of a client's question notifications.
-    # T9.34: two refused lists; T11.3: four refused thread calls.
-    assert len(errors) == 3 + 6 + 9 + 1 + 2 + 3 + 1 + 2 + 4
+    # T9.34: two refused lists; T11.3: four refused thread calls; T11.17: one code with no profile.
+    assert len(errors) == 3 + 6 + 9 + 1 + 2 + 3 + 1 + 2 + 4 + 1
     texts = [stream.getvalue(), caplog.text, *(str(e) for e in errors), *(repr(e) for e in errors)]
-    # The two refused codes were logged, by reason only (T9.12).
-    assert stream.getvalue().count('"event": "invite_refused"') == 2
+    # The three refused codes were logged, by reason only (T9.12, T11.17).
+    assert stream.getvalue().count('"event": "invite_refused"') == 3
+    assert stream.getvalue().count('"reason": "no_profile"') == 1
     for canary in (*STORE_CANARY_TEXTS, "CANA-RYCA-NARY", "CANARYCANARY", *codes):
         for text in texts:
             assert canary not in text, canary

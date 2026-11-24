@@ -3,10 +3,13 @@
 Every read and write goes through the store with the session's own user ID (`views/account.py`).
 A gymer has one coach at a time (T9.12). With no coach, the page asks for the coach's code and the
 scopes to share (all off until the gymer ticks them); a refused code gets one fixed message per
-reason, never which of missing, used or expired it was. With a coach, it shows the coach's display
-name (read through `users.display_name_of()`, so the gymer knows who sees their data), the scopes to
-turn on or off, and a way to end the relationship. The coach's next read follows each change at
-once, as the store checks the sharing on every read (D16).
+reason, never which of missing, used or expired it was. A gymer with no coach and no saved profile
+(whose first Save carries the 18+ check) gets no code form, only a note and a link to My profile:
+the store refuses their code anyway (T11.17); a relationship made before T11.17, or before the
+profile was deleted, stays as it is. With a coach, it shows the coach's display name (read through
+`users.display_name_of()`, so the gymer knows who sees their data), the scopes to turn on or off,
+and a way to end the relationship. The coach's next read follows each change at once, as the store
+checks the sharing on every read (D16).
 """
 
 import streamlit as st
@@ -15,7 +18,7 @@ from src import account as accounts
 from src import chat, config, sharing
 from src.store import invitations, users
 from src.store.access import SCOPES, NotFound
-from views import account, header
+from views import account, header, pages
 from views.text import t
 
 URL_PATH = "sharing"
@@ -84,6 +87,14 @@ def _accept(user: dict) -> None:
     except NotFound:
         return  # the account was deleted in another tab: the next run shows the welcome page
     _done("sharing.accepted")
+
+
+def _profile_first() -> None:
+    """Say that a coach can connect only after the profile, with the age, is saved; link to it."""
+    st.info(t("sharing.profile_first"), icon=":material/person:")
+    st.page_link(
+        pages.profile_page_ref(), label=t("sharing.profile_link"), icon=":material/person:"
+    )
 
 
 def _share(user: dict, relationship: dict) -> None:
@@ -156,13 +167,16 @@ def page() -> None:
         try:
             with accounts.open_store(account.store_path()) as conn:
                 relationships = users.list_relationships(conn, user["id"])
+                saved = accounts.has_profile_entries(conn, user["id"])
         except accounts.StoreUnavailable:
             st.error(t("account.store_unavailable"), icon=":material/error:")
             return
-        except NotFound:
+        except NotFound, accounts.AccountError:
             return  # the account was deleted in another tab: the next run shows the welcome page
         active = next((row for row in relationships if row["status"] == "active"), None)
-        if active is None:
+        if active is None and not saved:
+            _profile_first()
+        elif active is None:
             _accept(user)
         else:
             name = chat.escape_markdown(active["other_name"])

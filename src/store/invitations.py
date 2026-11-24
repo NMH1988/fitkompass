@@ -7,7 +7,10 @@ enters it and chooses the scopes to share: a valid, unexpired, unused code start
 relationship with those scopes, in one transaction, and is marked used. A missing, cancelled, used
 or expired code gets one refusal that does not say which. Every try counts against the gymer's
 daily limit (`config.INVITE_MAX_ATTEMPTS`, a day in `config.TIME_ZONE`), counted in the store and
-committed before the code is checked, so neither a reload nor a refused code resets it.
+committed before the code is checked, so neither a reload nor a refused code resets it. A gymer who
+has not saved a profile (whose first Save carries the 18+ check) is refused before the try is
+counted or the code is read, and the code is left as it was, so no code starts a relationship for a
+gymer with no declared age (T11.17).
 """
 
 import hashlib
@@ -20,11 +23,11 @@ from typing import Literal
 from zoneinfo import ZoneInfo
 
 from src import config
-from src.store import users, values
+from src.store import records, users, values
 from src.store.access import SCOPES, NotFound, role_of
 from src.store.db import transaction
 
-Refusal = Literal["not_valid", "limit", "has_coach"]
+Refusal = Literal["not_valid", "limit", "has_coach", "no_profile"]
 
 _ADD = """
 INSERT INTO invitations (coach_id, code_hash, created_at, expires_at) VALUES (?, ?, ?, ?)
@@ -44,7 +47,7 @@ ON CONFLICT (user_id, day) DO UPDATE SET count = count + 1
 
 
 class InvitationRefused(Exception):
-    """A code that cannot be accepted: `reason` says only which of three fixed refusals it is."""
+    """A code that cannot be accepted: `reason` says only which of the fixed refusals it is."""
 
     def __init__(self, reason: Refusal) -> None:
         """Keep the reason; the message never holds the code."""
@@ -133,11 +136,14 @@ def cancel_invitation(conn: sqlite3.Connection, coach_id: str, invitation_id: ob
 
 
 def _count_attempt(conn: sqlite3.Connection, gymer_id: str) -> None:
-    """Count one try for today, or refuse with "limit" once the day's tries are used up."""
+    """Count one try for today; refuse with "no_profile" uncounted, or "limit" once used up."""
     day = values.date_text(_today(), "day")
     with transaction(conn):
         if role_of(conn, gymer_id) != "gymer":
             raise NotFound
+        # Before the count: a gymer with no declared age has not tried a code (T11.17).
+        if not records._has_profile_entry(conn, gymer_id):
+            raise InvitationRefused("no_profile")
         row = conn.execute(_ATTEMPTS, (gymer_id, day)).fetchone()
         if row is not None and row["count"] >= config.INVITE_MAX_ATTEMPTS:
             raise InvitationRefused("limit")
@@ -154,6 +160,10 @@ def accept_invitation(
     _count_attempt(conn, gymer_id)
     normalised = normalise_code(code)
     with transaction(conn):
+        # Again in the transaction that starts the relationship: the profile may have been deleted
+        # in another tab since the try was counted (that rare case keeps its counted try).
+        if not records._has_profile_entry(conn, gymer_id):
+            raise InvitationRefused("no_profile")
         if users._has_coach(conn, gymer_id):
             raise InvitationRefused("has_coach")
         row = None

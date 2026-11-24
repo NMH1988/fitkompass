@@ -624,6 +624,7 @@ def test_a_name_without_a_relationship_is_not_found(store_conn, relationships, c
 def test_a_gymer_does_not_see_a_coachs_name_before_accepting(store_conn, relationships):
     """An invitation joins nobody: the coach's name is not found until the code is accepted."""
     users.create_user(store_conn, "gym-new", "gymer", "Newcomer")
+    world.add_records(store_conn, "gym-new")  # a saved profile, which a code needs (T11.17)
     new = invitations.create_invitation(store_conn, world.COACH_B)
     with pytest.raises(access.NotFound):
         users.display_name_of(store_conn, "gym-new", world.COACH_B)
