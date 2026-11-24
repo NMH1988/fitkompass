@@ -1,38 +1,63 @@
-"""Tests for the chat server's process (T11.4a, D24): a real uvicorn server, its logs and main().
+"""Tests for the chat socket mounted on Streamlit's own server (T11.4a, T11.4b, D24).
 
 FastAPI's TestClient never runs uvicorn's protocol code, which writes the handshake lines (with the
-client's address) and the tracebacks of uncaught errors; these tests run a real `uvicorn.Server`
-bound to 127.0.0.1 on a free port, in a thread, and talk to it with the `websockets` client.
+client's address) and the tracebacks of uncaught errors. These tests start a real Streamlit server
+with `streamlit run` in a child process, through a wrapper like serve.py that mounts the chat app
+with `server.chat_routes()`, bound to 127.0.0.1 on a free port, and talk to it with the `websockets`
+client. The child's working folder and home are a temporary folder, and its page script is a tiny
+one there, so it reads no secrets file of the repo; the secret comes from its environment.
 """
 
 import io
 import json
 import logging
 import os
+import socket
 import subprocess
 import sys
-import threading
 import time
 import urllib.request
 from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
+import uvicorn
+from starlette.routing import Mount
 from websockets.exceptions import ConnectionClosed, InvalidStatus
 from websockets.sync.client import connect
 
-from src import config, observability, tracing
-from src.realtime import app as chat_app
+from src import config, observability
+from src.realtime import page as realtime_page
 from src.realtime import server as chat_server
 from src.realtime import tokens
-from src.store import messages
 from tests import store_world as world
-from tests.fakes import patch_config
 
 ROOT = Path(__file__).resolve().parent.parent
 SECRET = "test-chat-secret-" + "x" * 32
-ORIGIN = "http://localhost:8501"
 CANARY = "CANARY-uvicorn-7f3e"
+PATH = config.CHAT_MOUNT_PATH + config.CHAT_SOCKET_PATH
+# The child's wrapper: serve.py's call with a test store, and, with BROKEN set, a store write that
+# fails with the canary in its message.
+WRAPPER = """
+import os
+from pathlib import Path
+
+from src.realtime import server
+from src.store import messages
+
+if os.environ.get("FITKOMPASS_TEST_BROKEN"):
+    def broken(*args, **kwargs):
+        raise RuntimeError("cannot store " + os.environ["FITKOMPASS_TEST_CANARY"])
+    messages.send_message = broken
+
+import streamlit as st
+
+app = st.App(
+    str(Path(__file__).with_name("page.py")),
+    routes=server.chat_routes(store_path=lambda: Path(os.environ["FITKOMPASS_TEST_STORE"])),
+    lifespan=server.quiet_library_logs,
+)
+"""
 
 
 @pytest.fixture
@@ -54,34 +79,83 @@ def relationships(store_conn):
     return world.build(store_conn)
 
 
-@pytest.fixture
-def secret(monkeypatch):
-    """Give the server a test secret through the one config function."""
-    patch_config(monkeypatch, "chat_token_secret", lambda: SECRET)
+def _free_port() -> int:
+    """Return a port on 127.0.0.1 that is free now."""
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
 
 
 @contextmanager
-def _running(stream: io.StringIO):
-    """Run a real uvicorn server for the chat app on a free port; yield its ws:// URL."""
-    observability.configure_logging(stream=stream)
-    server = chat_server.build_server(chat_app.create_app(config.STORE_PATH), port=0)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    deadline = time.monotonic() + 10
-    while not server.started:
-        assert time.monotonic() < deadline, "the server did not start"
-        time.sleep(0.02)
-    host, port = server.servers[0].sockets[0].getsockname()[:2]
-    try:
-        yield host, port
-    finally:
-        server.should_exit = True
-        thread.join(timeout=10)
+def _streamlit(tmp_path: Path, *, broken: bool = False):
+    """Run `streamlit run` on a wrapper like serve.py in a child process; yield port and logs."""
+    (tmp_path / "page.py").write_text('import streamlit as st\n\nst.write("page")\n', "utf-8")
+    wrapper = tmp_path / "wrapper.py"
+    wrapper.write_text(WRAPPER, encoding="utf-8")
+    port = _free_port()
+    env = {
+        **os.environ,
+        "PYTHONPATH": str(ROOT),
+        "HOME": str(tmp_path),
+        "USERPROFILE": str(tmp_path),
+        config.CHAT_TOKEN_SECRET_ENV_NAME: SECRET,
+        "FITKOMPASS_TEST_STORE": str(config.STORE_PATH),
+        "FITKOMPASS_TEST_CANARY": CANARY,
+    }
+    env.pop("FITKOMPASS_TEST_BROKEN", None)
+    if broken:
+        env["FITKOMPASS_TEST_BROKEN"] = "1"
+    out, err = tmp_path / "stdout.txt", tmp_path / "stderr.txt"
+    command = [
+        sys.executable,
+        "-m",
+        "streamlit",
+        "run",
+        str(wrapper),
+        "--server.address",
+        "127.0.0.1",
+        "--server.port",
+        str(port),
+        "--server.headless",
+        "true",
+        "--browser.gatherUsageStats",
+        "false",
+        "--global.developmentMode",
+        "false",
+    ]
+    with out.open("w", encoding="utf-8") as stdout, err.open("w", encoding="utf-8") as stderr:
+        child = subprocess.Popen(command, cwd=tmp_path, env=env, stdout=stdout, stderr=stderr)
+        try:
+            deadline = time.monotonic() + 90
+            while True:
+                assert child.poll() is None, err.read_text(encoding="utf-8")[-2000:]
+                assert time.monotonic() < deadline, "streamlit did not start"
+                try:
+                    with urllib.request.urlopen(
+                        f"http://127.0.0.1:{port}/_stcore/health", timeout=2
+                    ):
+                        break
+                except OSError:
+                    time.sleep(0.2)
+            logs = {"stdout": out, "stderr": err}
+            yield port, logs
+        finally:
+            child.terminate()
+            try:
+                child.wait(timeout=20)
+            except subprocess.TimeoutExpired:
+                child.kill()
+                child.wait(timeout=20)
 
 
-def _url(port: int, path: str = config.CHAT_SOCKET_PATH) -> str:
+def _url(port: int, path: str = PATH) -> str:
     """Return the socket's URL on the test server."""
     return f"ws://127.0.0.1:{port}{path}"
+
+
+def _origin(port: int) -> str:
+    """Return the page's origin on the test server."""
+    return f"http://localhost:{port}"
 
 
 def _auth(user: str, thread: int) -> str:
@@ -90,107 +164,180 @@ def _auth(user: str, thread: int) -> str:
     return json.dumps({"type": "auth", "token": token, "after_id": 0})
 
 
-def _until_ready(socket) -> list[dict]:
+def _until_ready(ws) -> list[dict]:
     """Return the frames received before the next ready frame."""
     frames = []
-    while (frame := json.loads(socket.recv(timeout=5)))["type"] != "ready":
+    while (frame := json.loads(ws.recv(timeout=10)))["type"] != "ready":
         frames.append(frame)
     return frames
 
 
-def _close_code(socket) -> int:
+def _close_code(ws) -> int:
     """Return the close code the server sent next."""
     with pytest.raises(ConnectionClosed) as closed:
-        socket.recv(timeout=5)
+        ws.recv(timeout=10)
     return closed.value.rcvd.code
 
 
-def test_the_server_binds_to_localhost_only(relationships, secret, library_loggers_are_reset):
-    """The listening socket is on 127.0.0.1, never on every interface."""
-    with _running(io.StringIO()) as (host, _port):
-        assert host == "127.0.0.1"
-    assert config.CHAT_SERVER_HOST == "127.0.0.1"
-
-
-def test_a_real_server_delivers_a_message_between_two_sockets(
-    relationships, secret, library_loggers_are_reset
+def test_a_message_crosses_streamlit_s_own_port_and_a_foreign_origin_is_refused(
+    relationships, tmp_path
 ):
-    """Through uvicorn's own protocol code: the gymer's message reaches the coach's socket."""
+    """Through `streamlit run` on the wrapper: one port serves the page and the chat socket."""
     thread = relationships[world.SHARED]
-    with _running(io.StringIO()) as (_host, port):
-        with connect(_url(port), origin=ORIGIN) as coach, connect(_url(port), origin=ORIGIN) as gym:
+    with _streamlit(tmp_path) as (port, _logs):
+        origin = _origin(port)
+        with connect(_url(port), origin=origin) as coach, connect(_url(port), origin=origin) as gym:
             coach.send(_auth(world.COACH_A, thread))
             gym.send(_auth(world.SHARED, thread))
             _until_ready(coach), _until_ready(gym)
             gym.send(json.dumps({"type": "send", "text": "Squats done"}))
-            frame = json.loads(coach.recv(timeout=5))
+            frame = json.loads(coach.recv(timeout=10))
+        # The page's own port only: the default 8501 is another port here, so it is refused.
+        for foreign in (
+            "http://localhost:8501",
+            "http://evil.example",
+            f"http://localhost:{port}0",
+        ):
+            with pytest.raises(InvalidStatus):
+                connect(_url(port), origin=foreign)
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=10) as answer:
+            assert answer.status == 200  # the page itself is still served
     assert frame["items"][0]["text"] == "Squats done" and frame["items"][0]["mine"] is False
 
 
-def test_no_line_the_server_writes_holds_a_canary_token_or_address(
-    relationships, secret, library_loggers_are_reset, monkeypatch, capfd
-):
-    """Normal, refused and failing traffic on a real server: every line is JSON without data."""
+def _no_data_in(logs: dict, forbidden: tuple[str, ...]) -> list[dict]:
+    """Assert no child output holds a forbidden value; return the JSON lines it wrote to stderr."""
+    out = logs["stdout"].read_text(encoding="utf-8")
+    err = logs["stderr"].read_text(encoding="utf-8")
+    for value in forbidden:
+        assert value not in out and value not in err, value
+    assert "Traceback" not in err and "connection open" not in err
+    lines = []
+    for text in err.splitlines():
+        if text.strip():
+            lines.append(json.loads(text))  # only the app's JSON lines on stderr
+    for line in lines:
+        assert set(line) <= {"ts", "level", "logger", "event"} | observability.ALLOWED_FIELDS
+    return lines
+
+
+def test_no_line_the_server_writes_holds_a_canary_token_or_address(relationships, tmp_path):
+    """Normal and refused traffic on a real Streamlit server: no text, token or client address."""
     thread = relationships[world.SHARED]
     token = tokens.mint(world.SHARED, thread, SECRET)
-    stream = io.StringIO()
-    with _running(stream) as (_host, port):
-        # Normal traffic.
-        with connect(_url(port), origin=ORIGIN) as coach, connect(_url(port), origin=ORIGIN) as gym:
+    client_ports = []
+    with _streamlit(tmp_path) as (port, logs):
+        origin = _origin(port)
+        with connect(_url(port), origin=origin) as coach, connect(_url(port), origin=origin) as gym:
+            client_ports += [coach.local_address[1], gym.local_address[1]]
             coach.send(_auth(world.COACH_A, thread))
             gym.send(json.dumps({"type": "auth", "token": token, "after_id": 0}))
             _until_ready(coach), _until_ready(gym)
             gym.send(json.dumps({"type": "send", "text": CANARY}))
-            coach.recv(timeout=5)
-            gym.recv(timeout=5)
+            coach.recv(timeout=10)
+            gym.recv(timeout=10)
         # Refused traffic: a forged token, a token in the query string, a foreign origin, an
         # oversized frame, a plain HTTP request with the canary in its path and query string.
-        with connect(_url(port), origin=ORIGIN) as bad:
+        with connect(_url(port), origin=origin) as bad:
+            client_ports.append(bad.local_address[1])
             bad.send(json.dumps({"type": "auth", "token": token[:-2] + CANARY, "after_id": 0}))
             assert _close_code(bad) == config.CHAT_CLOSE_REFUSED
         with pytest.raises(InvalidStatus):
-            connect(_url(port, f"{config.CHAT_SOCKET_PATH}?token={token}"), origin=ORIGIN)
+            connect(_url(port, f"{PATH}?token={token}"), origin=origin)
         with pytest.raises(InvalidStatus):
             connect(_url(port), origin=f"http://{CANARY}.example")
-        with connect(_url(port), origin=ORIGIN) as big:
+        with connect(_url(port), origin=origin) as big:
             big.send(CANARY * (config.CHAT_MAX_FRAME_BYTES // len(CANARY) + 10))
             with pytest.raises(ConnectionClosed):
-                big.recv(timeout=5)
-        with pytest.raises(OSError):
-            urllib.request.urlopen(f"http://127.0.0.1:{port}/{CANARY}?q={CANARY}", timeout=5)
-        # A handler that raises an error with the canary in its message.
+                big.recv(timeout=10)
+        try:
+            urllib.request.urlopen(f"http://127.0.0.1:{port}/{CANARY}?q={CANARY}", timeout=10)
+        except OSError:
+            pass
+        time.sleep(0.5)  # the child writes its last lines
+    forbidden = (CANARY, token, token.split(".")[2], world.SHARED, world.COACH_A)
+    _no_data_in(logs, forbidden + tuple(f":{number}" for number in client_ports))
 
-        def broken(*args, **kwargs):
-            """Fail as a store error whose message quotes the message's text."""
-            raise RuntimeError(f"cannot store {CANARY}")
 
-        monkeypatch.setattr(messages, "send_message", broken)
-        with connect(_url(port), origin=ORIGIN) as gym:
+def test_a_handler_error_is_logged_by_its_diagnostic_only(relationships, tmp_path):
+    """A store write that fails with the canary in its message: closed with 1011, no traceback."""
+    thread = relationships[world.SHARED]
+    token = tokens.mint(world.SHARED, thread, SECRET)
+    with _streamlit(tmp_path, broken=True) as (port, logs):
+        with connect(_url(port), origin=_origin(port)) as gym:
             gym.send(json.dumps({"type": "auth", "token": token, "after_id": 0}))
             _until_ready(gym)
             gym.send(json.dumps({"type": "send", "text": CANARY}))
             assert _close_code(gym) == config.CHAT_CLOSE_ERROR
-    written = stream.getvalue()
-    captured = capfd.readouterr()
-    everything = written + captured.out + captured.err
-    for forbidden in (CANARY, token, token.split(".")[2], world.SHARED, "127.0.0.1", "Traceback"):
-        assert forbidden not in everything, forbidden
-    lines = [json.loads(line) for line in written.splitlines()]
-    assert lines, "the server wrote no line at all"
-    for line in lines:
-        assert set(line) <= {"ts", "level", "logger", "event"} | observability.ALLOWED_FIELDS
+        time.sleep(0.5)
+    lines = _no_data_in(logs, (CANARY, token, world.SHARED))
     assert any(line["event"] == "chat_error" for line in lines)
-    # Only the app's JSON lines: nothing on stdout or stderr in uvicorn's own format.
-    assert captured.out == "" and captured.err == ""
+
+
+def test_serve_py_mounts_the_chat_beside_app_py(tmp_path):
+    """serve.py builds Streamlit's app for app.py with the chat mounted, on the pages' store."""
+    # In a child process: building an st.App pins the process's script folder for config files.
+    code = (
+        "import serve; from src.realtime import server;"
+        "routes = serve.app._user_routes;"
+        "print(serve.app._script_path.name, [r.path for r in routes], server.mounted(),"
+        " serve.app._user_lifespan is server.quiet_library_logs)"
+    )
+    env = {
+        **os.environ,
+        "PYTHONPATH": str(ROOT),
+        "HOME": str(tmp_path),
+        "USERPROFILE": str(tmp_path),
+    }
+    done = subprocess.run(
+        [sys.executable, "-c", code], cwd=ROOT, env=env, capture_output=True, text=True, timeout=120
+    )
+    assert done.returncode == 0, done.stderr[-2000:]
+    assert done.stdout.strip().splitlines()[-1] == f"app.py ['{config.CHAT_MOUNT_PATH}'] True True"
+
+
+def test_chat_routes_mount_the_chat_and_mark_the_process(monkeypatch):
+    """The chat app is mounted at the mount path; mounted() turns true only then."""
+    monkeypatch.setitem(chat_server._MOUNTED, "chat", False)
+    assert chat_server.mounted() is False
+    [route] = chat_server.chat_routes(store_path=lambda: config.STORE_PATH)
+    assert isinstance(route, Mount) and route.path == config.CHAT_MOUNT_PATH
+    assert chat_server.mounted() is True
+
+
+def test_serve_py_is_found_by_streamlit_run_as_an_asgi_app():
+    """`streamlit run serve.py` reads the file for `app = st.App(...)`: it must find it there."""
+    from streamlit.web.server.app_discovery import discover_asgi_app
+
+    found = discover_asgi_app(ROOT / "serve.py")
+    assert found.is_asgi_app and found.app_name == "app"
+
+
+def test_the_allowed_origins_follow_the_port_streamlit_serves(monkeypatch):
+    """Both local hosts on the served port, plus the public origins; nothing else."""
+    assert realtime_page.allowed_origins(8502) == {"http://localhost:8502", "http://127.0.0.1:8502"}
+    monkeypatch.setattr(config, "CHAT_PUBLIC_ORIGINS", frozenset({"https://app.example"}))
+    assert "https://app.example" in realtime_page.allowed_origins(8501)
+    monkeypatch.setattr(chat_server.st, "get_option", lambda name: 8503)
+    assert "http://localhost:8503" in chat_server.current_origins()
 
 
 def test_uvicorn_s_loggers_write_only_warnings_through_the_json_formatter(
     library_loggers_are_reset,
 ):
-    """After build_server(), every library logger is at WARNING, with the app's handler only."""
+    """After uvicorn sets its loggers up, the lifespan hook routes them through the JSON handler."""
+    import asyncio
+
     stream = io.StringIO()
+    uvicorn.Config(lambda scope, receive, send: None)  # uvicorn's own logging config, at INFO
     observability.configure_logging(stream=stream)
-    chat_server.build_server(chat_app.create_app(config.STORE_PATH), port=0)
+
+    async def run_hook() -> None:
+        """Enter and leave the lifespan hook."""
+        async with chat_server.quiet_library_logs(None):
+            pass
+
+    asyncio.run(run_hook())
     for name in chat_server.LIBRARY_LOGGERS:
         library = logging.getLogger(name)
         assert library.level == logging.WARNING and library.propagate is False
@@ -206,20 +353,9 @@ def test_uvicorn_s_loggers_write_only_warnings_through_the_json_formatter(
     assert CANARY not in stream.getvalue() and "127.0.0.1" not in stream.getvalue()
 
 
-def test_the_server_s_settings_keep_uvicorn_quiet(library_loggers_are_reset):
-    """Access log off, no proxy headers, no server header, frames capped, localhost."""
-    observability.configure_logging(stream=io.StringIO())
-    server = chat_server.build_server(chat_app.create_app(config.STORE_PATH))
-    settings = server.config
-    assert settings.access_log is False and settings.proxy_headers is False
-    assert settings.host == "127.0.0.1" and settings.port == config.CHAT_SERVER_PORT
-    assert settings.server_header is False and settings.ws_max_size == config.CHAT_MAX_FRAME_BYTES
-
-
 def test_reading_the_secret_outside_streamlit_writes_nothing_to_stderr(tmp_path):
     """No secrets.toml, the secret in the environment: read with no Streamlit warning printed."""
-    # In a fresh process whose working folder and home have no .streamlit/, as the chat server's
-    # process reads st.secrets outside a Streamlit runtime.
+    # In a fresh process whose working folder and home have no .streamlit/, as a script would.
     env = {
         **os.environ,
         "PYTHONPATH": str(ROOT),
@@ -241,79 +377,3 @@ def test_reading_the_secret_outside_streamlit_writes_nothing_to_stderr(tmp_path)
     )
     assert done.returncode == 0 and done.stdout.strip() == "True"
     assert done.stderr == ""
-
-
-# --- main() --------------------------------------------------------------------------------------
-
-
-@pytest.fixture
-def no_run(monkeypatch):
-    """Replace uvicorn's run with a recorder, so main() never opens a port; return the calls."""
-    runs = []
-    monkeypatch.setattr(chat_server.uvicorn.Server, "run", lambda self: runs.append(self))
-    return runs
-
-
-def _main_lines(capsys) -> list[dict]:
-    """Return the JSON lines main() wrote to stderr."""
-    return [json.loads(line) for line in capsys.readouterr().err.splitlines()]
-
-
-def test_main_never_sets_up_tracing_whatever_the_flags_say(
-    monkeypatch, secret, relationships, no_run, library_loggers_are_reset
-):
-    """Tracing, its key and the demo flag all on: tracing is turned off, no client installed."""
-    patch_config(monkeypatch, "tracing_requested", lambda: True)
-    patch_config(monkeypatch, "get_langsmith_api_key", lambda: "lsv2-test-not-a-real-key")
-    patch_config(monkeypatch, "tracing_demo_unmasked", lambda: True)
-    patch_config(monkeypatch, "demo_mode", lambda: True)
-
-    set_up, turned_off = [], []
-    real_set_up, real_turn_off = tracing.configure_tracing, tracing.turn_off_tracing
-    # Recorded, not refused: conftest's teardown calls configure_tracing() to reset the state.
-    monkeypatch.setattr(tracing, "configure_tracing", lambda: set_up.append(real_set_up()))
-    monkeypatch.setattr(tracing, "turn_off_tracing", lambda: turned_off.append(real_turn_off()))
-    assert chat_server.main(["--store", str(config.STORE_PATH)]) == 0
-    assert set_up == [] and turned_off == [None] and len(no_run) == 1
-    assert tracing._installed["key_digest"] is None and not tracing.demo_gate_open()
-
-
-def test_main_refuses_to_start_without_a_secret(
-    monkeypatch, no_run, capsys, library_loggers_are_reset
-):
-    """No secret: exit status 2, a fixed reason, no server."""
-    patch_config(monkeypatch, "chat_token_secret", lambda: None)
-    assert chat_server.main([]) == 2 and no_run == []
-    [line] = _main_lines(capsys)
-    assert line["event"] == "chat_server" and line["reason"] == "no_secret"
-
-
-def test_main_in_demo_mode_needs_the_store_s_path(
-    monkeypatch, secret, no_run, capsys, library_loggers_are_reset
-):
-    """Demo mode's store is the Streamlit process's temporary file, so --store must name it."""
-    patch_config(monkeypatch, "demo_mode", lambda: True)
-    assert chat_server.main([]) == 2 and no_run == []
-    assert _main_lines(capsys)[0]["reason"] == "demo_store"
-
-
-def test_main_never_creates_a_store_file(
-    monkeypatch, secret, no_run, capsys, tmp_path, library_loggers_are_reset
-):
-    """A path with no file is refused: the server opens only a store the app already made."""
-    missing = tmp_path / "missing.sqlite3"
-    assert chat_server.main(["--store", str(missing)]) == 2 and no_run == []
-    assert not missing.exists()
-    assert _main_lines(capsys)[0]["reason"] == "no_store"
-
-
-def test_main_serves_the_named_store_on_localhost(
-    monkeypatch, secret, relationships, no_run, capsys, library_loggers_are_reset
-):
-    """With a secret and an existing store, main() runs uvicorn on 127.0.0.1."""
-    patch_config(monkeypatch, "demo_mode", lambda: True)
-    assert chat_server.main(["--store", str(config.STORE_PATH), "--port", "8599"]) == 0
-    [server] = no_run
-    assert server.config.host == "127.0.0.1" and server.config.port == 8599
-    line = _main_lines(capsys)[-1]
-    assert line["event"] == "chat_server" and line["status"] == "started"

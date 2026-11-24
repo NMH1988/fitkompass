@@ -39,6 +39,23 @@ def no_env_key(monkeypatch):
     monkeypatch.delenv(config.API_KEY_NAME, raising=False)
 
 
+@pytest.fixture(autouse=True)
+def no_local_secrets(monkeypatch, tmp_path_factory):
+    """Hide the developer's secrets.toml and demo and chat env vars, as in CI (T11.4b)."""
+    # AppTest given no secrets of its own, and code run outside AppTest, read the global
+    # st.secrets: on a machine whose .streamlit/secrets.toml turns DEMO_MODE on, a page then
+    # opened the demo store instead of the test's (code review round 8 of T11.4b). A test that
+    # needs a file uses secrets_from_file, which sets its own path over this one.
+    original = st_config.get_option("secrets.files")
+    missing = tmp_path_factory.mktemp("no_secrets") / "secrets.toml"
+    st_config.set_option("secrets.files", [str(missing)])
+    monkeypatch.setattr(st, "secrets", Secrets())
+    for name in (config.DEMO_MODE_NAME, config.CHAT_TOKEN_SECRET_ENV_NAME):
+        monkeypatch.delenv(name, raising=False)
+    yield
+    st_config.set_option("secrets.files", original)
+
+
 @pytest.fixture
 def secrets_from_file(monkeypatch, tmp_path):
     """Return a helper that points a real st.secrets at a secrets.toml with the given text."""

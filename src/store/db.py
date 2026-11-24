@@ -7,12 +7,13 @@ Streamlit runs each session in its own thread, and a connection is not shared be
 Every transaction takes the write lock (`BEGIN IMMEDIATE`), reads included, so sessions use the
 file one at a time: fine for a local app, and it keeps a read and its audit row together.
 
-The file is in write-ahead log mode (WAL), so a second process (the chat server, D24) uses it next
-to Streamlit. As every store transaction takes the write lock, two of them still take turns (up to
-the busy timeout) in either mode; what WAL adds is that a commit never waits for a reader, so a
-statement run outside a transaction (a migration check, a role lookup, a long-lived connection's
-own read) never makes a write fail, and a reader never sees a write half done. WAL is a setting of
-the file, so the first connection of this version moves an existing store to it.
+The file is in write-ahead log mode (WAL), so the chat socket (D24) reads and writes it on
+connections of its own next to the pages', and a second process could too. As every store
+transaction takes the write lock, two of them still take turns (up to the busy timeout) in either
+mode; what WAL adds is that a commit never waits for a reader, so a statement run outside a
+transaction (a migration check, a role lookup, a long-lived connection's own read) never makes a
+write fail, and a reader never sees a write half done. WAL is a setting of the file, so the first
+connection of this version moves an existing store to it.
 """
 
 import logging
@@ -38,8 +39,8 @@ _TEMP_STORE_MEMORY = "PRAGMA temp_store = MEMORY"
 # store; Windows applies the user profile's access rules instead (docs/SECURITY.md).
 _PRIVATE_FOLDER = 0o700
 _PRIVATE_FILE = 0o600
-# A second process reads and writes the file (D24). The mode is kept in the file; the pragma
-# returns the mode in force, which stays the old one when the switch could not be made.
+# Other connections read and write the file at the same time (D24). The mode is kept in the file;
+# the pragma returns the mode in force, which stays the old one when the switch could not be made.
 _WAL_ON = "PRAGMA journal_mode = WAL"
 _WAL = "wal"
 # Copies the log's pages into the file and empties the log, so a deleted row's earlier copies
@@ -63,7 +64,7 @@ _ROLLBACK = "ROLLBACK"
 
 # The one message for a store file that cannot be prepared: an OS error's text names the path.
 _CANNOT_PREPARE = "The data file's folder or permissions could not be set."
-_NO_WAL = "The data file could not be set up for a second process to use it."
+_NO_WAL = "The data file could not be set up for several connections to use it at once."
 
 
 class StoreError(RuntimeError):
@@ -185,8 +186,8 @@ def checkpoint(conn: sqlite3.Connection) -> bool:
     """Copy the write-ahead log into the file and empty it; False if it could not finish."""
     # Run after a delete has committed, so it never raises: the delete stands either way, and a
     # failure here must not be shown as a failed delete. Another connection's transaction that
-    # outlasts the short wait (a read, or any store call, as each takes the write lock; in this
-    # process or the chat server's) keeps it from finishing; the deleted rows' copies then stay in
+    # outlasts the short wait (a read, or any store call, as each takes the write lock: a page's or
+    # the chat socket's) keeps it from finishing; the deleted rows' copies then stay in
     # the log until a later checkpoint completes (the next delete's, SQLite's automatic one after
     # about 1000 pages, or the last connection's close). A fixed event with a status, never the
     # error's text (docs/SECURITY.md).

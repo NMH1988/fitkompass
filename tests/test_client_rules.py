@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-SCANNED = [ROOT / "src", ROOT / "views", ROOT / "scripts", ROOT / "app.py"]
+SCANNED = [ROOT / "src", ROOT / "views", ROOT / "scripts", ROOT / "app.py", ROOT / "serve.py"]
 # The one module that builds clients (build_chat_model(), build_embeddings()).
 CLIENT_MODULE = ROOT / "src" / "llm.py"
 

@@ -1189,7 +1189,7 @@ LOG_METHODS = {"debug", "info", "warning", "error", "exception", "critical", "lo
 @pytest.mark.parametrize("folder", ["views", "scripts"])
 def test_the_views_and_scripts_write_no_log_lines(folder):
     """A logger outside src/ would bypass the formatter and the canary tests; none exists."""
-    for path in sorted((ROOT / folder).glob("*.py")) + [ROOT / "app.py"]:
+    for path in sorted((ROOT / folder).glob("*.py")) + [ROOT / "app.py", ROOT / "serve.py"]:
         assert _logging_calls(path) == [], path
 
 
