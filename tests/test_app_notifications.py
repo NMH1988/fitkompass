@@ -263,15 +263,19 @@ def test_a_failed_mark_all_as_read_shows_the_fixed_message_once(monkeypatch, coa
 
 
 def test_demo_users_have_their_notifications(monkeypatch, demo_store_is_fresh):  # noqa: F811
-    """Criterion 5: the demo coach sees Sam's connection and, from T11.4b, Sam's message."""
+    """Criterion 5: Sam's connection, Sam's message (T11.4b) and Jo's and Lee's (T11.8)."""
     at = start_demo(monkeypatch)
     at.selectbox(key="demo_user_start").set_value(demo.COACH.id).run(timeout=30)
-    assert _bell(at) == ["Notifications · 2 unread"]
+    assert _bell(at) == ["Notifications · 4 unread"]
     at = open_page(at, navigation.NOTIFICATIONS)
     assert any(
         "Demo gymer Sam connected and shares: Body, Nutrition." in line for line in _lines(at)
     )
     assert any("Demo gymer Sam sent you a message." in line for line in _lines(at))
+    for rater in demo.RATERS:
+        assert any(
+            f"{rater.display_name} connected and shares: Nutrition." in line for line in _lines(at)
+        )
 
 
 def test_the_bell_page_and_toasts_in_german(monkeypatch, coach_world):

@@ -224,6 +224,38 @@ def test_delete_everything_says_the_threads_go_for_both_sides(
     assert both_sides in texts(at)
 
 
+@pytest.mark.parametrize(
+    ("role", "language", "stored"),
+    [
+        ("gymer", "en", "your ratings of your coach's recipes"),
+        ("gymer", "de", "Ihre Bewertungen der Rezepte Ihres Coachs"),
+        ("coach", "en", "Your recipes, with every version and food, are in the export"),
+        ("coach", "de", "Ihre Rezepte mit jeder Fassung und jedem Lebensmittel stehen im Export"),
+    ],
+)
+def test_the_intro_names_the_recipes_and_ratings(monkeypatch, role, language, stored):
+    """A gymer is told their ratings are stored, a coach their recipes (T11.8)."""
+    store_account(role, name="Alex", profile=PROFILE if role == "gymer" else None)
+    at = open_my_data(start(monkeypatch, user=signed_in(), language=language))
+    assert stored in texts(at)
+
+
+@pytest.mark.parametrize(
+    ("language", "ratings_go"),
+    [
+        ("en", "a coach's recipes go with every client's rating of them, while the meals"),
+        ("de", "die Rezepte eines Coachs gehen mit allen Bewertungen der Klienten"),
+    ],
+)
+def test_delete_everything_says_a_coach_s_recipes_take_the_ratings(
+    monkeypatch, language, ratings_go
+):
+    """The delete note says the clients' ratings go with a coach's recipes (T11.8)."""
+    store_account("coach", name="Alex")
+    at = open_my_data(start(monkeypatch, user=signed_in(), language=language))
+    assert ratings_go in texts(at)
+
+
 def test_my_data_shows_the_fixed_message_when_the_store_fails_later(monkeypatch):
     """A store that fails after sign-in shows the fixed message, never the error's text."""
     store_account("gymer", profile=PROFILE)
@@ -431,7 +463,7 @@ def test_my_data_says_where_the_relationships_are(monkeypatch, gymer_with_record
     page = texts(at)
     assert "relationships, sharing choices, the foods your coaches suggested to you" in page
     # T11.7: the coaches' meal plans for the gymer are in the export too.
-    assert "the meal plans your coaches set for you, your questions" in page
+    assert "the meal plans your coaches set for you, your ratings" in page
     assert "your coach's reads of your data and your notification read mark" in page
 
 

@@ -72,6 +72,21 @@ MAX_SUGGESTED_FOODS = 20
 # never below CALORIE_FLOOR_KCAL (an empty plan, which removes the plan, excepted). The store
 # checks them all. 30 leaves room for four meal slots of several foods each.
 MAX_MEAL_PLAN_FOODS = 30
+# The coach's recipe library (T11.8): a recipe's name and steps (the coach's own words, shown as
+# Markdown with images and links as plain text) keep these lengths, it has at least one and at most
+# MAX_RECIPE_INGREDIENTS foods, each with grams in the food log's range and once per recipe, and a
+# coach keeps at most MAX_RECIPES_PER_COACH recipes. A gymer logs one scaled by a factor in
+# RECIPE_PORTION_RANGE (the page offers RECIPE_PORTION_STEP steps); every scaled ingredient keeps
+# the food log's gram range. The store checks them all.
+RECIPE_NAME_MAX_CHARS = 80
+RECIPE_STEPS_MAX_CHARS = 3000
+MAX_RECIPE_INGREDIENTS = 25
+MAX_RECIPES_PER_COACH = 100
+RECIPE_PORTION_RANGE = (0.25, 3.0)
+RECIPE_PORTION_STEP = 0.25
+# A recipe's average rating shows to its coach only once at least this many clients who share
+# nutrition with the coach have rated it (T11.8); below it the coach sees no count either.
+RATING_MIN_RATERS = 3
 # In-app notifications (T9.29, D23): the Notifications page lists at most this many, newest first,
 # and at most NOTIFICATIONS_MAX_TOASTS show as toasts in one run (the rest as one "and N more"
 # toast). A scope granted within NOTIFICATIONS_SAME_EVENT_SECONDS after a code was accepted counts
