@@ -129,6 +129,17 @@ NEW_NAMES = frozenset(
         "CHAT_TOKEN_SECRET_PLACEHOLDER",
         "chat_token_secret",
         "MAX_MEAL_PLAN_FOODS",  # T11.7
+        # T11.5: drafting log entries from a gymer's own messages.
+        "DRAFT_MODEL",
+        "DRAFT_MAX_TOKENS",
+        "DRAFT_PROVIDERS",
+        "DRAFT_PROMPT_PATH",
+        "DRAFT_PROMPT_MISSING_MESSAGE",
+        "DRAFT_MAX_MESSAGES_PER_RUN",
+        "DRAFT_MAX_FOODS",
+        "DRAFT_MAX_SET_GROUPS",
+        "DRAFT_MAX_SETS_PER_GROUP",
+        "DRAFT_MAX_STEPS",
     }
 )
 

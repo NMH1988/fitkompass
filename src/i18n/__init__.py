@@ -14,6 +14,7 @@ from src.i18n import (
     account,
     chat,
     dashboards,
+    drafts,
     food,
     messages,
     profile,
@@ -35,7 +36,7 @@ from src.i18n.core import (
 )
 
 # The page modules whose texts make up TEXT.
-PAGES = (shared, chat, messages, profile, food, dashboards, reviews, account, thread)
+PAGES = (shared, chat, messages, profile, food, dashboards, reviews, account, thread, drafts)
 for _page in PAGES:
     add_texts(_page.__name__, _page.EN, _page.DE)
 del _page

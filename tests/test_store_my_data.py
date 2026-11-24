@@ -9,6 +9,7 @@ import pytest
 
 from src.store import (
     access,
+    ai_consents,
     db,
     meal_plans,
     messages,
@@ -27,6 +28,7 @@ SUGGESTED = suggestions.SuggestedFood("breakfast", 9001, "CANARY-FOOD oats", 80.
 QUESTION = "CANARY-QUESTION why fewer carbs?"
 ANSWER = "CANARY-ANSWER rest days need less."
 MESSAGE = "CANARY-MESSAGE had oats and two eggs"
+VERSION = "0123456789ab"
 PLANNED = meal_plans.PlannedFood(
     "dinner", 9003, "CANARY-PLAN pasta", 400.0, 1480.0, 52.0, 300.0, 6.0
 )
@@ -70,7 +72,7 @@ def full_world(store_conn):
         ).fetchone()[0]
         for gymer in world.GYMERS
     }
-    messages.send_message(store_conn, world.SHARED, threads[world.SHARED], MESSAGE)
+    drafted = messages.send_message(store_conn, world.SHARED, threads[world.SHARED], MESSAGE)
     messages.send_message(store_conn, world.COACH_A, threads[world.SHARED], "Nice, log it.")
     messages.send_message(store_conn, world.COACH_A, threads[world.UNSHARED], "Welcome!")
     messages.send_message(store_conn, world.OTHERS, threads[world.OTHERS], "Coach B, hi.")
@@ -78,6 +80,11 @@ def full_world(store_conn):
         "INSERT INTO messages (relationship_id, sender_id, text, created_at) VALUES (?, ?, ?, ?)",
         (threads[world.ENDED], world.ENDED, "Thanks for everything.", NOW),
     )
+    # T11.5: the gymers' Art. 9 consents, (b) given to their coach, and a drafted message's mark.
+    ai_consents.give(store_conn, world.SHARED, "message_drafts", VERSION)
+    ai_consents.give(store_conn, world.SHARED, "coach_thread", VERSION, threads[world.SHARED])
+    ai_consents.give(store_conn, world.OTHERS, "coach_thread", VERSION, threads[world.OTHERS])
+    store_conn.execute("INSERT INTO message_drafts (message_id) VALUES (?)", (drafted,))
     # T9.12 adds the functions for these two tables; the rows are written directly here.
     for coach in (world.COACH_A, world.COACH_B):
         store_conn.execute(
@@ -148,6 +155,7 @@ def test_the_store_has_the_columns_this_test_expects(full_world):
         ("messages", "sender_id"),
         ("meal_plans", "client_id"),
         ("meal_plans", "coach_id"),
+        ("ai_consents", "user_id"),
     }
 
 
@@ -584,3 +592,60 @@ def test_deleting_a_user_removes_every_row_they_wrote(full_world):
     count = "SELECT count(*) FROM review_questions WHERE author_id = ?"
     assert full_world.execute(count, (world.OTHERS,)).fetchone()[0] == 0
     assert full_world.execute("SELECT count(*) FROM review_questions").fetchone()[0] == 2
+
+
+# --- Art. 9 consents and drafted marks (T11.5) ----------------------------------------------------
+
+
+def _purposes(rows):
+    """Return the (purpose, has a relationship) pairs of exported consent rows."""
+    return sorted((row["purpose"], row["relationship_id"] is not None) for row in rows)
+
+
+def test_only_the_gymers_export_holds_their_consents_and_drafted_marks(full_world):
+    """The gymer exports every consent row and their drafted messages; the coach exports neither."""
+    gymer = json.loads(my_data.export_user_data(full_world, world.SHARED))
+    assert _purposes(gymer["ai_consents"]) == [("coach_thread", True), ("message_drafts", False)]
+    assert len(gymer["message_drafts"]) == 1
+    coach = json.loads(my_data.export_user_data(full_world, world.COACH_A))
+    assert coach["ai_consents"] == [] and coach["message_drafts"] == []
+
+
+def test_a_withdrawn_and_given_again_consent_exports_its_history(full_world):
+    """Withdrawing and giving again keeps both rows, the first with its withdrawal time."""
+    ai_consents.withdraw(full_world, world.SHARED, "message_drafts")
+    ai_consents.give(full_world, world.SHARED, "message_drafts", VERSION)
+    rows = json.loads(my_data.export_user_data(full_world, world.SHARED))["ai_consents"]
+    drafts = [row for row in rows if row["purpose"] == "message_drafts"]
+    assert [row["withdrawn_at"] is None for row in drafts] == [False, True]
+
+
+def test_a_coachs_delete_removes_the_consent_given_to_them_and_keeps_the_gymers_log(full_world):
+    """The coach's delete takes (b) and the drafted mark with the thread; (a) and the log stay."""
+    meals_before = full_world.execute(
+        "SELECT count(*) FROM meal_items WHERE user_id = ?", (world.SHARED,)
+    ).fetchone()[0]
+    my_data.delete_user_data(full_world, world.COACH_A, no_threads)
+    rows = full_world.execute(
+        "SELECT purpose FROM ai_consents WHERE user_id = ?", (world.SHARED,)
+    ).fetchall()
+    assert [row["purpose"] for row in rows] == ["message_drafts"]
+    assert full_world.execute("SELECT count(*) FROM message_drafts").fetchone()[0] == 0
+    meals_after = full_world.execute(
+        "SELECT count(*) FROM meal_items WHERE user_id = ?", (world.SHARED,)
+    ).fetchone()[0]
+    assert meals_after == meals_before > 0
+    others = full_world.execute(
+        "SELECT count(*) FROM ai_consents WHERE user_id = ?", (world.OTHERS,)
+    ).fetchone()[0]
+    assert others == 1
+
+
+def test_a_gymers_delete_removes_their_consents_and_drafted_marks(full_world):
+    """The gymer's delete removes every consent row of theirs and their messages' marks."""
+    my_data.delete_user_data(full_world, world.SHARED, no_threads)
+    mine = full_world.execute(
+        "SELECT count(*) FROM ai_consents WHERE user_id = ?", (world.SHARED,)
+    ).fetchone()[0]
+    assert mine == 0
+    assert full_world.execute("SELECT count(*) FROM message_drafts").fetchone()[0] == 0

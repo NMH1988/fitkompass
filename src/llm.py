@@ -188,6 +188,7 @@ def build_chat_model(
     model: str = config.DEFAULT_ANSWER_MODEL,
     max_tokens: int = config.DEFAULT_MAX_TOKENS,
     *,
+    providers: tuple[str, ...] | None = None,
     api_key: str | None = None,
     http_client: Any = None,
 ) -> ChatOpenAI:
@@ -196,6 +197,21 @@ def build_chat_model(
         raise ValueError(f"Model {model!r} is not on the allowed list.")
     if max_tokens < 1:
         raise ValueError("max_tokens must be at least 1.")
+    if providers is not None and (
+        not isinstance(providers, tuple)
+        or not providers
+        or not all(isinstance(name, str) and name for name in providers)
+    ):
+        raise ValueError("providers must name at least one provider.")
+    # With providers, OpenRouter routes the model only to them, with no fallback to another: a
+    # consent text that names the provider stays true (T11.5). Set here, once, when the client is
+    # built, and holding only OpenRouter's routing object, so no call can change the model or the
+    # budget through it.
+    routing = (
+        None
+        if providers is None
+        else {"provider": {"only": list(providers), "allow_fallbacks": False}}
+    )
     return ChatOpenAI(
         model=model,
         base_url=config.OPENROUTER_BASE_URL,
@@ -209,6 +225,7 @@ def build_chat_model(
         # Token use of streamed replies (T5.1): langchain turns it on only for OpenAI's own URL.
         stream_usage=True,
         http_client=http_client,
+        extra_body=routing,
     )
 
 

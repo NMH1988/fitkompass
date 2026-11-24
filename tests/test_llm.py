@@ -617,3 +617,64 @@ def test_refused_or_empty_structured_reply_maps_to_invalid_reply(message, raised
     assert str(excinfo.value) == llm.InvalidReplyError.user_message
     assert "help" not in str(excinfo.value)
     assert excinfo.value.diagnostic.startswith(f"{raised_by} in langchain_openai.")
+
+
+def test_a_client_without_providers_sends_no_routing():
+    """A client built without providers lets OpenRouter route as before (no provider object)."""
+    server = Recorder(body=CHAT_OK)
+    client = _chat(server)
+    client.invoke("Hi")
+    assert "provider" not in server.last_json() and "models" not in server.last_json()
+    assert client.extra_body is None
+
+
+def test_a_client_with_providers_pins_them_with_no_fallback():
+    """The draft client sends OpenRouter's routing: only its providers, no fallback (T11.5)."""
+    server = Recorder(body=CHAT_OK)
+    client = _chat(server, providers=config.DRAFT_PROVIDERS)
+    client.invoke("Hi")
+    assert server.last_json()["provider"] == {"only": ["openai"], "allow_fallbacks": False}
+    assert set(client.extra_body) == {"provider"}
+
+
+@pytest.mark.parametrize("providers", [(), ("",), (None,), "openai", ["openai"]])
+def test_providers_must_name_one(providers):
+    """An empty list or an empty name is refused when the client is built."""
+    with pytest.raises(ValueError, match="providers"):
+        llm.build_chat_model(api_key=FAKE_KEY, providers=providers)
+
+
+def test_the_app_s_draft_client_is_pinned_on_its_structured_call():
+    """drafting.build_model(), used by the workflow and the page, sends the pin with its schema."""
+    from src import drafting
+
+    server = Recorder(body=CHAT_OK)
+    client = drafting.build_model(api_key=FAKE_KEY, http_client=server.client())
+    structured = client.with_structured_output(
+        drafting.DraftEntries, method="json_schema", include_raw=True
+    )
+    try:
+        structured.invoke("Oats.")
+    except Exception:  # noqa: BLE001 - the fake reply is no draft; only the request matters
+        pass
+    body = server.last_json()
+    assert body["provider"] == {"only": list(config.DRAFT_PROVIDERS), "allow_fallbacks": False}
+    assert body["model"] == config.DRAFT_MODEL
+    assert body["max_completion_tokens"] == config.DRAFT_MAX_TOKENS
+
+
+def test_the_page_and_the_workflow_build_the_draft_client_one_way(monkeypatch):
+    """The page's cached client and the workflow's default both come from drafting.build_model."""
+    from src import drafting
+    from src.agent import drafts as workflow
+    from views import resources
+
+    built = object()
+    monkeypatch.setattr(drafting, "build_model", lambda: built)
+    resources.draft_model.clear()
+    try:
+        assert resources.draft_model() is built
+    finally:
+        resources.draft_model.clear()
+    context = workflow.DraftContext(store_path=config.STORE_PATH, prompt=None)
+    assert context.chat_model() is built

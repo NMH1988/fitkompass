@@ -27,6 +27,7 @@ from src.preferences import PreferenceCheck
 from src.tools import coach_clients, registry
 from tests import store_world as world
 from tests import test_agent_clients as clients_tests
+from tests import test_agent_drafts as drafts_tests
 from tests import test_agent_review as review_tests
 from tests import test_observability as obs
 from tests.fakes import patch_config, tool_reply
@@ -780,6 +781,49 @@ def test_a_weekly_review_and_its_decision_are_masked_and_carry_their_turn_id(sto
     # placeholder: neither its days nor how many exercises show (code review rounds 4 and 5).
     weeks = list(_values_under("metrics", start_runs))
     assert weeks and all(week == config.TRACE_MASK for week in weeks)
+
+
+DRAFT_CANARIES = (
+    "CANARY",
+    "ASKED-oats",
+    world.SHARED,
+    world.COACH_A,
+    "Coach A",
+    drafts_tests.OATS,
+    drafts_tests.PROMPT,
+    "81.6",
+)
+
+
+def test_a_draft_run_and_its_decision_are_masked_and_carry_their_turn_id(store_conn, traced):
+    """The message, the cards' values, the prompt and the IDs stay out of each draft run (T11.5)."""
+    relationships = world.build(store_conn)
+    drafts_tests.ai_consents.give(
+        store_conn, world.SHARED, "message_drafts", drafts_tests.drafting.consent_version()
+    )
+    stream = io.StringIO()
+    observability.configure_logging(stream=stream)
+    drafts_tests._send(store_conn, relationships, "CANARY-MSG oats, 180 lb, squats 3 x 5 x 100")
+    reply = json.loads(drafts_tests.FULL)
+    reply["foods"][0]["food"] = "ASKED-oats rolled"  # the model's own name, on the card only
+    model = drafts_tests._model(json.dumps(reply))
+    drafter, started = drafts_tests._start(model, relationships)
+    assert started.outcome == "pending"
+    start_runs = traced.runs()
+    traced.sent.clear()
+    decided = drafter.decide(drafts_tests._context(model), drafts_tests._approve_all(started))
+    assert decided.outcome == "done"
+    decide_runs = traced.runs()
+    lines = [json.loads(line) for line in stream.getvalue().splitlines()]
+    ids = [line["turn_id"] for line in lines if line["event"] == "draft_entries"]
+    assert len(ids) == 2 and ids[0] != ids[1]
+    assert start_runs and {meta.get("turn_id") for meta in _metadata(start_runs)} == {ids[0]}
+    assert decide_runs and {meta.get("turn_id") for meta in _metadata(decide_runs)} == {ids[1]}
+    version = drafts_tests.chat.Prompt(drafts_tests.PROMPT).version
+    assert {meta.get("prompt_drafts") for meta in _metadata(start_runs)} == {version}
+    searched = _searched(start_runs + decide_runs)
+    for canary in DRAFT_CANARIES:
+        assert canary not in searched, canary
 
 
 def _values_under(key: str, value):

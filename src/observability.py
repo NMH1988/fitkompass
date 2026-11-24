@@ -63,6 +63,10 @@ EVENTS = frozenset(
         "chat_connection",
         "chat_message",
         "chat_error",
+        # A run or a decision of the drafts from a gymer's messages (T11.5): its outcome code and
+        # counts (messages read, refused by the guard, cards, dropped entries, entries logged);
+        # never a message, a food, a value or a user.
+        "draft_entries",
         LOG_FAILED_EVENT,
     }
 )
@@ -100,9 +104,17 @@ ALLOWED_FIELDS = frozenset(
         "prompt_answer",
         "prompt_query",
         "prompt_review",
+        "prompt_drafts",
         # The weekly review (T9.16): how many drafts were asked for, and the failed checks' codes.
         "attempts",
         "checks",
+        # The drafts from a gymer's messages (T11.5): counts only (never "messages", the name a
+        # graph's state gives its message list).
+        "messages_read",
+        "refused",
+        "cards",
+        "dropped",
+        "logged",
         # The warnings and the error line.
         "diagnostic",
         "status_code",

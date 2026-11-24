@@ -10,14 +10,16 @@ EN: dict[str, str] = {
         "this app's data file on this computer, with the sender and the time. A former client "
         "still reads your conversation after your relationship ends, and so do you; neither of "
         "you can send then. Either side's Delete everything (My data) deletes the conversation for "
-        "both. Messages are not sent to the AI."
+        "both. Messages are not sent to the AI, except a client's own messages when the client "
+        "asks for AI drafts of their log entries, with their consent; yours never are."
     ),
     "messages.intro_gymer": (
         "Messages between you and your coach. They are stored in this app's data file on this "
         "computer, with the sender and the time. A former coach still reads your conversation "
         "after your relationship ends, and so do you; neither of you can send then. Either side's "
-        "Delete everything (My data) deletes the conversation for both. Messages are not sent to "
-        "the AI."
+        "Delete everything (My data) deletes the conversation for both. Your coach's messages are "
+        "never sent to the AI; yours are only when you press the button for AI drafts below, with "
+        "your consent."
     ),
     "messages.made_up_only": "Use made-up data only: do not write real health data.",
     "messages.pick": "Conversation",
@@ -57,14 +59,17 @@ DE: dict[str, str] = {
         "Absender und Uhrzeit in der Datendatei dieser App auf diesem Computer gespeichert. Ein "
         "ehemaliger Klient liest Ihr Gespräch auch nach dem Ende Ihrer Verbindung weiter, ebenso "
         "Sie; senden kann dann keiner von Ihnen. „Alles löschen“ (Meine Daten) löscht das Gespräch "
-        "für beide Seiten, egal wer es auslöst. Nachrichten werden nicht an die KI gesendet."
+        "für beide Seiten, egal wer es auslöst. Nachrichten werden nicht an die KI gesendet, außer "
+        "den eigenen Nachrichten eines Klienten, wenn er mit seiner Einwilligung KI-Entwürfe "
+        "seiner Tagebucheinträge anfordert; Ihre nie."
     ),
     "messages.intro_gymer": (
         "Nachrichten zwischen Ihnen und Ihrem Coach. Sie werden mit Absender und Uhrzeit in der "
         "Datendatei dieser App auf diesem Computer gespeichert. Ein ehemaliger Coach liest Ihr "
         "Gespräch auch nach dem Ende Ihrer Verbindung weiter, ebenso Sie; senden kann dann keiner "
         "von Ihnen. „Alles löschen“ (Meine Daten) löscht das Gespräch für beide Seiten, egal wer "
-        "es auslöst. Nachrichten werden nicht an die KI gesendet."
+        "es auslöst. Die Nachrichten Ihres Coachs werden nie an die KI gesendet; Ihre nur, wenn "
+        "Sie unten auf die Schaltfläche für KI-Entwürfe klicken, mit Ihrer Einwilligung."
     ),
     "messages.made_up_only": (
         "Verwenden Sie nur erfundene Daten: Schreiben Sie keine echten Gesundheitsdaten."
