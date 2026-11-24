@@ -64,14 +64,18 @@ def sidebar_card(system: units.UnitSystem) -> None:
 
 
 def active_coach_target() -> metrics.Target | None:
-    """Return a signed-in gymer's active target if their coach set it, else None (T9.17)."""
+    """Return a gymer's active target if their coach set it and they saved a profile, else None."""
     user = account.current_user()
     if user is None or user["role"] != "gymer":
         return None
     try:
         with accounts.open_store(account.store_path()) as conn:
+            # A coach's numbers show only to a gymer who has saved a profile, whose first Save
+            # carries the 18+ check, as the coach's meal plan does (T11.7).
+            if not accounts.has_profile_entries(conn, user["id"]):
+                return None
             stored = records.list_targets(conn, user["id"], user["id"])
-    except accounts.StoreUnavailable, NotFound:
+    except accounts.StoreUnavailable, NotFound, accounts.AccountError:
         return None  # the page's store notice says the store is down; a deleted account reruns
     active = metrics.active_target(stored, accounts.today())
     return active if active is not None and active.set_by == "coach" else None

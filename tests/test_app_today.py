@@ -74,6 +74,7 @@ def test_today_is_in_the_gymers_menu_after_the_home(monkeypatch):
     assert navigation.PAGES_BY_ROLE["gymer"] == (
         navigation.PROFILE,
         navigation.TODAY,
+        navigation.MEAL_PLAN,  # T11.7
         navigation.WORKOUTS,
         navigation.MY_WEEK,
         navigation.SHARING,

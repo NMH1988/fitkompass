@@ -22,7 +22,8 @@ under every approved review about them, a former coach's too. Each row is its ow
 question and its answer are separate actions), so no same-event window applies to them.
 
 From T9.34, a gymer also sees each list of suggested foods a coach saved about them (a former
-coach's too, as with reviews): the coach's name and the time, never a food or an amount.
+coach's too, as with reviews): the coach's name and the time, never a food or an amount. From
+T11.7, likewise each meal plan a coach saved about them (an empty one, which removes the plan, too).
 
 From T11.3, each side also sees, for each thread (relationship) they are a side of, active or
 ended, the newest message the other side sent: one notification per thread, never one per
@@ -65,6 +66,7 @@ Kind = Literal[
     "question_asked",
     "question_answered",
     "suggestions_updated",
+    "meal_plan_updated",
     "message_received",
 ]
 
@@ -104,6 +106,11 @@ ORDER BY message.id
 _SUGGESTIONS_ABOUT = """
 SELECT id, coach_id, created_at FROM food_suggestion_lists WHERE client_id = ? ORDER BY id
 """
+# T11.7: each meal plan a coach saved about a gymer (an empty one, which removes the plan, too): who
+# saved it and when; never a food or an amount. A former coach's plans too, as their lists are.
+_MEAL_PLANS_ABOUT = (
+    "SELECT id, coach_id, created_at FROM meal_plans WHERE client_id = ? ORDER BY id"
+)
 _LATEST_MARK = """
 SELECT read_up_to FROM notification_reads WHERE user_id = ? ORDER BY id DESC LIMIT 1
 """
@@ -119,8 +126,9 @@ _ORDER: dict[str, int] = {
     "question_asked": 4,
     "question_answered": 5,
     "suggestions_updated": 6,
-    "message_received": 7,
-    "ended": 8,
+    "meal_plan_updated": 7,
+    "message_received": 8,
+    "ended": 9,
 }
 
 
@@ -303,6 +311,20 @@ def list_notifications(
                     saved["created_at"],
                     coach,
                     key=("suggestions_updated", saved["id"], saved["created_at"]),
+                )
+            )
+        for saved in conn.execute(_MEAL_PLANS_ABOUT, (user_id,)).fetchall():
+            # Saved only within a relationship, and both go with a deletion (T11.7).
+            try:
+                coach = name_of(saved["coach_id"])
+            except NotFound:
+                continue
+            found.append(
+                Notification(
+                    "meal_plan_updated",
+                    saved["created_at"],
+                    coach,
+                    key=("meal_plan_updated", saved["id"], saved["created_at"]),
                 )
             )
         four = (user_id, user_id, user_id, user_id)

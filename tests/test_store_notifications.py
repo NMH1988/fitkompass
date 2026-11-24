@@ -15,7 +15,15 @@ from pathlib import Path
 import pytest
 
 from src import config
-from src.store import invitations, my_data, notifications, reviews, suggestions, users
+from src.store import (
+    invitations,
+    meal_plans,
+    my_data,
+    notifications,
+    reviews,
+    suggestions,
+    users,
+)
 from src.store.access import NotFound
 from src.store.values import StoreValueError, utc_text
 from tests.store_world import no_threads
@@ -451,6 +459,51 @@ def test_a_coach_s_deletion_takes_the_list_s_notification_with_it(people):
     _suggest(people, COACH, GYM)
     my_data.delete_user_data(people, COACH, no_threads)
     assert all(kind != "suggestions_updated" for kind, *_ in _seen(people, GYM))
+
+
+# --- T11.7: the gymer is told of each meal plan ---------------------------------------------------
+
+
+def _plan(conn, coach: str, client: str, name: str = "CANARY-FOOD oats") -> int:
+    """Save a made-up one-food plan above the calorie floor as the coach; return its ID."""
+    item = meal_plans.PlannedFood("lunch", 1, name, 456.0, 1789.0, 60.0, 250.0, 50.0)
+    return meal_plans.add_client_meal_plan(conn, coach, client, [item])
+
+
+def test_a_gymer_is_told_of_each_plan_and_the_coach_of_none(people):
+    """Each saved plan, an empty one too, is one notification with the coach's name only."""
+    rel = users.start_relationship(people, COACH, GYM)
+    users.set_consent(people, GYM, rel, "nutrition", True)
+    _plan(people, COACH, GYM)
+    meal_plans.add_client_meal_plan(people, COACH, GYM, [])  # the plan removed
+    told = [row for row in _seen(people, GYM) if row[0] == "meal_plan_updated"]
+    assert told == [("meal_plan_updated", "Coach Nia", (), None)] * 2
+    assert all(kind != "meal_plan_updated" for kind, *_ in _seen(people, COACH))
+    for found in notifications.list_notifications(people, GYM):
+        assert "CANARY-FOOD" not in repr(found)
+        assert "456" not in repr(found) and "1789" not in repr(found)
+
+
+def test_a_former_coach_s_plan_stays_told_and_nobody_else_is_told(people):
+    """After the end the notification keeps the coach's name; another gymer sees nothing of it."""
+    rel = users.start_relationship(people, COACH, GYM)
+    users.set_consent(people, GYM, rel, "nutrition", True)
+    _plan(people, COACH, GYM)
+    users.end_relationship(people, GYM, rel)
+    assert ("meal_plan_updated", "Coach Nia", (), None) in _seen(people, GYM)
+    assert all(kind != "meal_plan_updated" for kind, *_ in _seen(people, OTHER_GYM))
+
+
+@pytest.mark.parametrize("deleted", [COACH, GYM])
+def test_either_side_s_deletion_takes_the_plan_s_notification_with_it(people, deleted):
+    """The plan goes with either side's data, and so does its notification."""
+    rel = users.start_relationship(people, COACH, GYM)
+    users.set_consent(people, GYM, rel, "nutrition", True)
+    _plan(people, COACH, GYM)
+    my_data.delete_user_data(people, deleted, no_threads)
+    if deleted == COACH:
+        assert all(kind != "meal_plan_updated" for kind, *_ in _seen(people, GYM))
+    assert people.execute("SELECT count(*) FROM meal_plans").fetchone()[0] == 0
 
 
 # --- T11.3: the newest message from the other side, one per thread --------------------------------

@@ -17,6 +17,7 @@ from views import (
     account,
     client_targets,
     header,
+    meal_plan,
     questions,
     suggestions,
     week_view,
@@ -115,5 +116,7 @@ def page() -> None:
         client_targets.coach_section(user, picked, week)
         # The foods the coach suggests to the client, to log in one click (T9.34).
         suggestions.coach_section(user, picked, week)
+        # The client's meal plan, one template day for every day (T11.7).
+        meal_plan.coach_section(user, picked, week)
         # The week's review: start it, decide it, or read it (T9.16).
         weekly_review.coach_section(user, picked, monday, week, threads)

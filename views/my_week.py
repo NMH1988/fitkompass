@@ -7,7 +7,8 @@ when the coach approved it (the store never gives a gymer a pending or rejected 
 model's draft), labelled as an AI draft the coach approved (AC-41); a former coach's approved
 reviews show too, so no text says "your coach". Under each review, T9.25's questions to the coach
 (views/questions.py): the thread, still readable once the relationship has ended, and a box to ask
-while the coach may read the review.
+while the coach may read the review. The page shows only once the gymer has saved a profile (whose
+first Save carries the 18+ check), as the week holds the active target, a coach's too (T11.7).
 """
 
 import streamlit as st
@@ -51,6 +52,19 @@ def page() -> None:
             return  # not registered for them (views/navigation.py); never reached
         st.subheader(t("page.my_week"))
         st.markdown(t("my_week.intro"))
+        try:
+            with accounts.open_store(account.store_path()) as conn:
+                saved = accounts.has_profile_entries(conn, user["id"])
+        except accounts.StoreUnavailable:
+            st.error(t("account.store_unavailable"), icon=":material/error:")
+            return
+        except accounts.AccountError:
+            return  # the account was deleted in another tab: the next run shows the welcome page
+        if not saved:
+            # The week holds the active target, a coach's too: shown only to a gymer who has saved
+            # a profile, whose first Save carries the 18+ check, as Today and the meal plan (T11.7).
+            st.info(t("my_week.profile_first"), icon=":material/person:")
+            return
         monday = week_view.week_picker(WEEK_KEY)
         try:
             with accounts.open_store(account.store_path()) as conn:

@@ -128,6 +128,7 @@ NEW_NAMES = frozenset(
         "CHAT_TOKEN_SECRET_MIN_CHARS",
         "CHAT_TOKEN_SECRET_PLACEHOLDER",
         "chat_token_secret",
+        "MAX_MEAL_PLAN_FOODS",  # T11.7
     }
 )
 

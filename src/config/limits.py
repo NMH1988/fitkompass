@@ -67,6 +67,11 @@ TARGET_INPUT_MAX_GRAMS = 1000
 # grams in the food log's range (FOOD_MIN_GRAMS to FOOD_MAX_GRAMS) and a food at most once per
 # meal slot; the store checks them all.
 MAX_SUGGESTED_FOODS = 20
+# The coach's meal plan for a client (T11.7): one template day of at most this many items, each
+# with grams in the food log's range and a food at most once per meal slot; the day's total is
+# never below CALORIE_FLOOR_KCAL (an empty plan, which removes the plan, excepted). The store
+# checks them all. 30 leaves room for four meal slots of several foods each.
+MAX_MEAL_PLAN_FOODS = 30
 # In-app notifications (T9.29, D23): the Notifications page lists at most this many, newest first,
 # and at most NOTIFICATIONS_MAX_TOASTS show as toasts in one run (the rest as one "and N more"
 # toast). A scope granted within NOTIFICATIONS_SAME_EVENT_SECONDS after a code was accepted counts

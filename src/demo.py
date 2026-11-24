@@ -4,15 +4,15 @@ A fixture we wrote ourselves: made-up names and numbers, no real person's data. 
 into a temporary database when the app starts (only with DEMO_MODE on and no [auth] section), so a
 reviewer can try the coach and gymer pages without a Google client. Later tickets add their own
 records here (an invitation); T9.13 added Sam's meals, T9.14 Sam's workouts, T9.27 a full
-week before this one, so a coach can draft a weekly review of a finished week on any day, and
-T11.4b a short conversation between the coach and Sam.
+week before this one, so a coach can draft a weekly review of a finished week on any day, T11.4b
+a short conversation between the coach and Sam, and T11.7 the coach's meal plan for Sam.
 """
 
 import sqlite3
 from dataclasses import dataclass
 from datetime import timedelta
 
-from src import account, config, diary
+from src import account, config, diary, meal_plans
 from src.profile import UserProfile
 from src.store import messages, records, users
 from src.tools import registry
@@ -101,6 +101,10 @@ MESSAGES = (
     (SHARING_GYMER.id, "Good! The last set at 100 kg was hard but clean."),
     (COACH.id, "Great. Keep the weight next session and aim for the same form."),
 )
+# The coach's made-up meal plan for Sam (T11.7): the first day plan above, one template day of
+# about 2,500 kcal, above the calorie floor, so the gymer's Meal plan page and the coach's form on
+# Client week have a plan to show.
+MEAL_PLAN = DAY_PLANS[0]
 # Last week's logged days (0 is Monday) and Sam's workouts on three of them.
 LAST_WEEK_DAYS = (0, 1, 2, 4, 5, 6)
 LAST_WEEK_WORKOUTS = (
@@ -175,3 +179,4 @@ def seed(conn: sqlite3.Connection) -> None:
                 for number, (exercise_id, reps, kg, rpe) in enumerate(sets, start=1)
             ],
         )
+    meal_plans.save_meal_plan(conn, COACH.id, SHARING_GYMER.id, MEAL_PLAN)

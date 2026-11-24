@@ -10,6 +10,7 @@ import pytest
 from src import account, config, demo, observability
 from src.profile import UserProfile
 from src.store import db, messages, records, users
+from src.store import meal_plans as store_meal_plans
 from src.store.access import NotFound
 
 SECRET = "s" * config.USER_KEY_SECRET_MIN_CHARS
@@ -346,6 +347,17 @@ def test_the_demo_gymer_has_a_full_last_week_on_any_weekday(store_conn, monkeypa
     assert len([day for day in days if day in last_week]) == len(demo.LAST_WEEK_WORKOUTS)
     targets = records.list_targets(store_conn, sam, sam)
     assert min(target["effective_from"] for target in targets) < last_monday.isoformat()
+
+
+def test_the_demo_gymer_has_the_coach_s_meal_plan(store_conn):
+    """Sam reads the coach's made-up plan (T11.7), above the calorie floor; Kim has none."""
+    demo.seed(store_conn)
+    sam, kim = demo.SHARING_GYMER.id, demo.OTHER_GYMER.id
+    plan = store_meal_plans.current_meal_plan(store_conn, sam, sam)
+    assert plan["coach_id"] == demo.COACH.id
+    assert [(i["meal"], i["food_name"], i["grams"]) for i in plan["items"]] == list(demo.MEAL_PLAN)
+    assert sum(item["kcal"] for item in plan["items"]) >= config.CALORIE_FLOOR_KCAL
+    assert store_meal_plans.current_meal_plan(store_conn, kim, kim) is None
 
 
 def test_the_demo_users_are_made_up():

@@ -10,6 +10,7 @@ import pytest
 from src.store import (
     access,
     db,
+    meal_plans,
     messages,
     my_data,
     questions,
@@ -26,6 +27,9 @@ SUGGESTED = suggestions.SuggestedFood("breakfast", 9001, "CANARY-FOOD oats", 80.
 QUESTION = "CANARY-QUESTION why fewer carbs?"
 ANSWER = "CANARY-ANSWER rest days need less."
 MESSAGE = "CANARY-MESSAGE had oats and two eggs"
+PLANNED = meal_plans.PlannedFood(
+    "dinner", 9003, "CANARY-PLAN pasta", 400.0, 1480.0, 52.0, 300.0, 6.0
+)
 
 
 @pytest.fixture
@@ -55,6 +59,9 @@ def full_world(store_conn):
     # T9.34: each coach suggests foods to their client (an audited suggestions_set each).
     for coach, client in ((world.COACH_A, world.SHARED), (world.COACH_B, world.OTHERS)):
         suggestions.add_client_suggestions(store_conn, coach, client, [SUGGESTED])
+    # T11.7: each coach saves a meal plan for their client (an audited meal_plan_set each).
+    for coach, client in ((world.COACH_A, world.SHARED), (world.COACH_B, world.OTHERS)):
+        meal_plans.add_client_meal_plan(store_conn, coach, client, [PLANNED])
     # T11.3: a thread for each relationship. Coach A writes to the client who shares nothing, so
     # that client sends nothing; the ended thread's message is written as it was before the end.
     threads = {
@@ -139,6 +146,8 @@ def test_the_store_has_the_columns_this_test_expects(full_world):
         ("food_suggestion_lists", "client_id"),
         ("food_suggestion_lists", "coach_id"),
         ("messages", "sender_id"),
+        ("meal_plans", "client_id"),
+        ("meal_plans", "coach_id"),
     }
 
 
@@ -192,6 +201,7 @@ def test_a_gymers_export_holds_all_their_rows_as_json(full_world):
         "read",
         "review_answered",
         "suggestions_set",
+        "meal_plan_set",
     ]
     assert [(r["kind"], r["text"]) for r in document["review_questions"]] == [
         ("question", QUESTION),
@@ -204,6 +214,15 @@ def test_a_gymers_export_holds_all_their_rows_as_json(full_world):
     assert (listed["client_id"], listed["coach_id"]) == (world.SHARED, world.COACH_A)
     [item] = document["food_suggestion_items"]
     assert (item["list_id"], item["food_name"]) == (listed["id"], SUGGESTED.food_name)
+    # T11.7: the plan coach A wrote for this gymer, with its item; never coach B's.
+    [plan] = document["meal_plans"]
+    assert (plan["client_id"], plan["coach_id"]) == (world.SHARED, world.COACH_A)
+    [planned] = document["meal_plan_items"]
+    assert (planned["plan_id"], planned["food_name"], planned["grams"]) == (
+        plan["id"],
+        PLANNED.food_name,
+        PLANNED.grams,
+    )
     # T11.3: the whole thread with coach A, both sides' messages.
     assert [(m["sender_id"], m["text"]) for m in document["messages"]] == [
         (world.SHARED, MESSAGE),
@@ -224,6 +243,9 @@ def test_a_coachs_export_holds_their_relationships_reviews_and_invitations(full_
     # T9.34: the lists a coach wrote are their clients' data, so only their audit rows are here.
     assert document["food_suggestion_lists"] == [] and document["food_suggestion_items"] == []
     assert "suggestions_set" in {r["action"] for r in document["audit_log"]}
+    # T11.7: likewise the plans a coach wrote: only their audit rows, no food or amount.
+    assert document["meal_plans"] == [] and document["meal_plan_items"] == []
+    assert "meal_plan_set" in {r["action"] for r in document["audit_log"]}
 
 
 def _read_rows(conn):
@@ -338,6 +360,17 @@ def test_deleting_either_side_removes_their_suggestion_lists_and_items(full_worl
             r["from_suggestion"] for r in records.list_meal_items(full_world, *[world.SHARED] * 2)
         ]
         assert sorted(flags) == [0, 1]
+
+
+@pytest.mark.parametrize("user", [world.SHARED, world.COACH_A])
+def test_deleting_either_side_removes_their_meal_plans_and_items(full_world, user):
+    """Coach A's plans for SHARED go with either side's data (T11.7); coach B's plan stays."""
+    meal_plans.add_client_meal_plan(full_world, world.COACH_A, world.SHARED, [])  # a removal too
+    my_data.delete_user_data(full_world, user, no_threads)
+    plans = full_world.execute("SELECT client_id, coach_id FROM meal_plans").fetchall()
+    assert [tuple(row) for row in plans] == [(world.OTHERS, world.COACH_B)]
+    [item] = full_world.execute("SELECT food_name FROM meal_plan_items").fetchall()
+    assert item[0] == PLANNED.food_name
 
 
 def _store_bytes(path: Path) -> bytes:

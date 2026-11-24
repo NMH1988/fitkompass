@@ -16,7 +16,7 @@ from langchain_core.messages import AIMessage
 
 from src import chat, config, dashboard, guard, i18n
 from src.agent.memory import Conversation
-from src.store import db, questions, records, reviews, suggestions, users
+from src.store import db, meal_plans, questions, records, reviews, suggestions, users
 from src.tools import coach_clients, registry
 from src.tools.coach_clients import LIST_TOOL, WEEK_TOOL, ClientRefs, CoachClients
 from tests import store_world as world
@@ -547,4 +547,27 @@ def test_the_client_tools_send_no_suggested_food_or_share(relationships, store_c
     sent = "\n".join(str(message.content) for call in model.calls for message in call)
     assert '"logged_days"' in sent  # the week's tool results were in the messages
     for canary in ("CANARY-FOOD", "66.6", "suggested_items", "energy_share", "from_suggestion"):
+        assert canary not in sent, canary
+
+
+def test_the_client_tools_send_no_meal_plan(relationships, store_conn, index_path):
+    """T11.7: a client's meal plan never reaches the coach's model in a whole coach turn."""
+    meal_plans.add_client_meal_plan(
+        store_conn,
+        world.COACH_A,
+        world.SHARED,
+        [meal_plans.PlannedFood("dinner", 7, "CANARY-PLAN pasta", 432.1, 1777.7, 1.0, 2.0, 3.0)],
+    )
+    result, model = _turn(
+        index_path,
+        _clients(),
+        tool_reply((LIST_TOOL, {})),
+        tool_reply((WEEK_TOOL, {"client": "client-1"}), (WEEK_TOOL, {"client": "client-2"})),
+        AIMessage("Both clients logged this week."),
+        question="How did my clients eat this week?",
+    )
+    assert result.kind == "answer"
+    sent = "\n".join(str(message.content) for call in model.calls for message in call)
+    assert '"logged_days"' in sent  # the week's tool results were in the messages
+    for canary in ("CANARY-PLAN", "432.1", "1777", "meal_plan"):
         assert canary not in sent, canary
