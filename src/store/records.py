@@ -60,6 +60,7 @@ _PROFILES = """
 SELECT id, height_cm, age, sex, activity, goal, recorded_at
 FROM profile_entries WHERE user_id = ? ORDER BY recorded_at, id
 """
+_HAS_PROFILE = "SELECT 1 FROM profile_entries WHERE user_id = ? LIMIT 1"
 _ADD_WEIGHT = """
 INSERT INTO body_measurements (user_id, weight_kg, measured_on, recorded_at) VALUES (?, ?, ?, ?)
 """
@@ -198,6 +199,12 @@ def list_profile_entries(conn: sqlite3.Connection, actor_id: str, subject_id: st
     with authorised_read(conn, actor_id, subject_id, "body", "profile_entries"):
         rows = conn.execute(_PROFILES, (subject_id,)).fetchall()
     return [dict(row) for row in rows]
+
+
+def _has_profile_entry(conn: sqlite3.Connection, user_id: str) -> bool:
+    """Return True if the user has a profile entry, inside the caller's transaction (T11.17)."""
+    # Every entry passed the age check of `_profile_row()`, so one entry is a declared adult age.
+    return conn.execute(_HAS_PROFILE, (user_id,)).fetchone() is not None
 
 
 def _weight_row(user_id: str, weight_kg: float, measured_on: date) -> tuple:

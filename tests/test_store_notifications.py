@@ -20,6 +20,7 @@ from src.store import (
     meal_plans,
     my_data,
     notifications,
+    records,
     reviews,
     suggestions,
     users,
@@ -68,6 +69,13 @@ def _consent(conn, relationship: int, scope: str, granted: int, revoked: int | N
     conn.execute(
         "INSERT INTO consents (relationship_id, scope, granted_at, revoked_at) VALUES (?, ?, ?, ?)",
         (relationship, scope, _at(granted), None if revoked is None else _at(revoked)),
+    )
+
+
+def _with_profile(conn, gymer: str) -> None:
+    """Save a profile for the gymer, which redeeming a code needs (T11.17)."""
+    records.add_profile_entry(
+        conn, gymer, height_cm=170.0, age=30, sex="female", activity="moderate", goal="maintain"
     )
 
 
@@ -124,6 +132,7 @@ def test_the_same_event_window_is_the_config_s(people):
 def test_a_real_accept_with_two_scopes_shows_one_connected(people):
     """accept_invitation's own writes give the coach one "connected" with both scopes."""
     code = invitations.create_invitation(people, COACH).code
+    _with_profile(people, GYM)
     invitations.accept_invitation(people, GYM, code, ["body", "nutrition"])
     assert _seen(people, COACH) == [("connected", "Gym Noor", ("nutrition", "body"), None)]
 
@@ -170,6 +179,7 @@ def test_a_pair_that_connects_again_after_an_end_gets_new_events(people):
     users.set_consent(people, GYM, first, "body", True)
     users.end_relationship(people, GYM, first)
     code = invitations.create_invitation(people, COACH).code
+    _with_profile(people, GYM)
     invitations.accept_invitation(people, GYM, code, ["training"])
     kinds = [(kind, scopes) for kind, _, scopes, _ in _seen(people, COACH)]
     assert sorted(kinds) == sorted(
