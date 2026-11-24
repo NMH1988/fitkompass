@@ -21,7 +21,7 @@ Keep the entry short and record what the code does not say. `tests/test_docs_lay
 
 ---
 
-- [2026-11-24 · T11.8 The coach's recipe library and the clients' ratings · PR to be opened (closes NMH1988/fitkompass#15)](progress/2026-11-24-T11.8.md)
+- [2026-11-24 · T11.8 The coach's recipe library and the clients' ratings · NMH1988/fitkompass#39 (closes NMH1988/fitkompass#15)](progress/2026-11-24-T11.8.md)
 - [2026-11-23 · T11.7 The coach's meal plan for a client · NMH1988/fitkompass#36 (closes NMH1988/fitkompass#14)](progress/2026-11-23-T11.7.md)
 - [2026-11-23 · Plan: the coach's AI uses the client's thread (T11.6 rewritten, T11.14-T11.16) · NMH1988/fitkompass#33 (closes NMH1988/fitkompass#32)](progress/2026-11-23-plan-coach-ai-thread.md)
 - [2026-11-23 · T11.4b Records: status done after the merge · NMH1988/fitkompass#35 (closes NMH1988/fitkompass#34)](progress/2026-11-23-T11.4b-2.md)
