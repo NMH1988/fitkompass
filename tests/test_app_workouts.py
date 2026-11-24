@@ -69,6 +69,7 @@ def test_a_gymer_s_menu_has_workouts_and_the_page_opens(gymer):
         navigation.PROFILE,
         navigation.TODAY,
         navigation.MEAL_PLAN,  # T11.7
+        navigation.RECIPES,  # T11.8
         navigation.WORKOUTS,
         navigation.MY_WEEK,
         navigation.SHARING,

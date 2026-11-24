@@ -5,14 +5,16 @@ into a temporary database when the app starts (only with DEMO_MODE on and no [au
 reviewer can try the coach and gymer pages without a Google client. Later tickets add their own
 records here (an invitation); T9.13 added Sam's meals, T9.14 Sam's workouts, T9.27 a full
 week before this one, so a coach can draft a weekly review of a finished week on any day, T11.4b
-a short conversation between the coach and Sam, and T11.7 the coach's meal plan for Sam.
+a short conversation between the coach and Sam, T11.7 the coach's meal plan for Sam, and T11.8 the
+coach's two recipes and two more clients, Jo and Lee, who logged the first and rated it, so Sam's
+rating makes the minimum number of raters and the coach's Recipe library shows the average.
 """
 
 import sqlite3
 from dataclasses import dataclass
 from datetime import timedelta
 
-from src import account, config, diary, meal_plans
+from src import account, config, diary, meal_plans, recipes
 from src.profile import UserProfile
 from src.store import messages, records, users
 from src.tools import registry
@@ -30,7 +32,12 @@ class DemoUser:
 COACH = DemoUser("demo-coach", "coach", "Demo coach Alex")
 SHARING_GYMER = DemoUser("demo-gymer-sam", "gymer", "Demo gymer Sam")
 OTHER_GYMER = DemoUser("demo-gymer-kim", "gymer", "Demo gymer Kim")
-DEMO_USERS = (COACH, SHARING_GYMER, OTHER_GYMER)
+# T11.8: two more clients of the coach, sharing nutrition, who logged and rated the first recipe.
+RATERS = (
+    DemoUser("demo-gymer-jo", "gymer", "Demo gymer Jo"),
+    DemoUser("demo-gymer-lee", "gymer", "Demo gymer Lee"),
+)
+DEMO_USERS = (COACH, SHARING_GYMER, OTHER_GYMER, *RATERS)
 USER_IDS = frozenset(user.id for user in DEMO_USERS)
 
 # Made-up profiles. Sam is the coach's client and shares body and nutrition; Kim has no coach.
@@ -40,6 +47,12 @@ PROFILES = {
     ),
     OTHER_GYMER.id: UserProfile(
         weight_kg=64.0, height_cm=168, age=34, sex="female", activity="light", goal="lose_fat"
+    ),
+    RATERS[0].id: UserProfile(
+        weight_kg=70.5, height_cm=174, age=26, sex="female", activity="very_active", goal="maintain"
+    ),
+    RATERS[1].id: UserProfile(
+        weight_kg=88.0, height_cm=183, age=45, sex="male", activity="moderate", goal="lose_fat"
     ),
 }
 # Sam's weight a week before the profile's, so the history has more than one entry.
@@ -105,6 +118,35 @@ MESSAGES = (
 # about 2,500 kcal, above the calorie floor, so the gymer's Meal plan page and the coach's form on
 # Client week have a plan to show.
 MEAL_PLAN = DAY_PLANS[0]
+# The coach's made-up recipes (T11.8): (name, steps, (a USDA table name, grams)), names and steps
+# we wrote ourselves for everyday dishes, copied from no recipe source, with no image.
+RECIPES = (
+    (
+        "Overnight oats with yogurt and banana",
+        "1. Stir the oats into the yogurt in a jar.\n"
+        "2. Slice the banana on top and add the blueberries.\n"
+        "3. Close the jar and leave it in the fridge overnight; eat it cold in the morning.",
+        (
+            ("Oats, whole grain, rolled, old fashioned", 60.0),
+            ("Yogurt, Greek, plain, nonfat", 150.0),
+            ("Bananas, ripe and slightly ripe, raw", 100.0),
+            ("Blueberries, raw", 50.0),
+        ),
+    ),
+    (
+        "Chicken, rice and broccoli bowl",
+        "1. Cook the rice in twice its volume of water for about 15 minutes.\n"
+        "2. Cut the chicken into strips and fry them in a hot pan until no pink is left inside.\n"
+        "3. Steam the broccoli for about 5 minutes and serve everything in one bowl.",
+        (
+            ("Rice, white, long grain, unenriched, raw", 75.0),
+            ("Chicken, breast, boneless, skinless, raw", 150.0),
+            ("Broccoli, raw", 150.0),
+        ),
+    ),
+)
+# Jo's and Lee's stars for the first recipe: with Sam's, the third rating shows the average.
+RATER_STARS = (5, 4)
 # Last week's logged days (0 is Monday) and Sam's workouts on three of them.
 LAST_WEEK_DAYS = (0, 1, 2, 4, 5, 6)
 LAST_WEEK_WORKOUTS = (
@@ -121,6 +163,9 @@ def seed(conn: sqlite3.Connection) -> None:
     relationship = users.start_relationship(conn, COACH.id, SHARING_GYMER.id)
     for scope in SHARED_SCOPES:
         users.set_consent(conn, SHARING_GYMER.id, relationship, scope, True)
+    for rater in RATERS:
+        rater_relationship = users.start_relationship(conn, COACH.id, rater.id)
+        users.set_consent(conn, rater.id, rater_relationship, "nutrition", True)
     for sender, text in MESSAGES:
         messages.send_message(conn, sender, relationship, text)
     records.add_body_measurement(
@@ -180,3 +225,10 @@ def seed(conn: sqlite3.Connection) -> None:
             ],
         )
     meal_plans.save_meal_plan(conn, COACH.id, SHARING_GYMER.id, MEAL_PLAN)
+    recipe_ids = [
+        recipes.save_recipe(conn, COACH.id, None, name=name, steps=steps, rows=rows)
+        for name, steps, rows in RECIPES
+    ]
+    for rater, stars in zip(RATERS, RATER_STARS, strict=True):
+        recipes.log_recipe(conn, rater.id, recipe_ids[0], factor=1.0, meal="breakfast", day=today)
+        recipes.rate_recipe(conn, rater.id, recipe_ids[0], stars)

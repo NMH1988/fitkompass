@@ -14,6 +14,8 @@ from src.store import (
     messages,
     my_data,
     questions,
+    ratings,
+    recipes,
     records,
     reviews,
     suggestions,
@@ -30,6 +32,7 @@ MESSAGE = "CANARY-MESSAGE had oats and two eggs"
 PLANNED = meal_plans.PlannedFood(
     "dinner", 9003, "CANARY-PLAN pasta", 400.0, 1480.0, 52.0, 300.0, 6.0
 )
+RECIPE_FOOD = recipes.Ingredient(9004, "CANARY-RECIPE rice", 150.0, 195.0, 4.0, 42.0, 0.4, 0.6)
 
 
 @pytest.fixture
@@ -62,6 +65,18 @@ def full_world(store_conn):
     # T11.7: each coach saves a meal plan for their client (an audited meal_plan_set each).
     for coach, client in ((world.COACH_A, world.SHARED), (world.COACH_B, world.OTHERS)):
         meal_plans.add_client_meal_plan(store_conn, coach, client, [PLANNED])
+    # T11.8: each coach writes a recipe; their sharing client logs it and rates it.
+    for coach, client, stars in (
+        (world.COACH_A, world.SHARED, 4),
+        (world.COACH_B, world.OTHERS, 2),
+    ):
+        recipe_id = recipes.save_recipe(
+            store_conn, coach, None, name="Rice bowl", steps="Cook.", ingredients=[RECIPE_FOOD]
+        )
+        records.add_recipe_items(
+            store_conn, client, recipe_id, consumed_on=date(2026, 10, 27), meal="lunch", factor=1.0
+        )
+        ratings.rate_recipe(store_conn, client, recipe_id, stars)
     # T11.3: a thread for each relationship. Coach A writes to the client who shares nothing, so
     # that client sends nothing; the ended thread's message is written as it was before the end.
     threads = {
@@ -148,6 +163,8 @@ def test_the_store_has_the_columns_this_test_expects(full_world):
         ("messages", "sender_id"),
         ("meal_plans", "client_id"),
         ("meal_plans", "coach_id"),
+        ("recipes", "coach_id"),
+        ("recipe_ratings", "client_id"),
     }
 
 
@@ -183,10 +200,13 @@ def test_a_gymers_export_holds_all_their_rows_as_json(full_world):
     tables = {
         r[0] for r in full_world.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
     }
-    assert set(document) == (tables - {"users"}) | {"user"}
+    # sqlite_sequence is SQLite's own counter behind recipes' AUTOINCREMENT (T11.8), no user data.
+    assert set(document) == (tables - {"users", "sqlite_sequence"}) | {"user"}
     assert document["user"]["id"] == world.SHARED
-    for table in ("profile_entries", "body_measurements", "nutrition_targets", "meal_items"):
+    for table in ("profile_entries", "body_measurements", "nutrition_targets"):
         assert len(document[table]) == 1 and document[table][0]["user_id"] == world.SHARED
+    # The world's meal and the one logged from coach A's recipe (T11.8).
+    assert [m["user_id"] for m in document["meal_items"]] == [world.SHARED] * 2
     assert len(document["workout_sessions"]) == 1 and len(document["exercise_sets"]) == 2
     assert document["preferences"] == []  # only coaches keep preferences (T9.7)
     assert len(document["coach_clients"]) == 1 and len(document["consents"]) == 3
@@ -223,6 +243,12 @@ def test_a_gymers_export_holds_all_their_rows_as_json(full_world):
         PLANNED.food_name,
         PLANNED.grams,
     )
+    # T11.8: the gymer's own rating and the marked meal item; the coach's recipe is the coach's.
+    [rating] = document["recipe_ratings"]
+    assert (rating["client_id"], rating["stars"]) == (world.SHARED, 4)
+    assert [m["from_recipe"] for m in document["meal_items"]] == [None, rating["recipe_id"]]
+    assert document["recipes"] == document["recipe_versions"] == []
+    assert document["recipe_ingredients"] == []
     # T11.3: the whole thread with coach A, both sides' messages.
     assert [(m["sender_id"], m["text"]) for m in document["messages"]] == [
         (world.SHARED, MESSAGE),
@@ -246,6 +272,12 @@ def test_a_coachs_export_holds_their_relationships_reviews_and_invitations(full_
     # T11.7: likewise the plans a coach wrote: only their audit rows, no food or amount.
     assert document["meal_plans"] == [] and document["meal_plan_items"] == []
     assert "meal_plan_set" in {r["action"] for r in document["audit_log"]}
+    # T11.8: the coach's own recipe with its version and food; never a client's rating of it.
+    [recipe] = document["recipes"]
+    assert recipe["coach_id"] == world.COACH_A
+    assert [v["name"] for v in document["recipe_versions"]] == ["Rice bowl"]
+    assert [i["food_name"] for i in document["recipe_ingredients"]] == [RECIPE_FOOD.food_name]
+    assert document["recipe_ratings"] == []
 
 
 def _read_rows(conn):
@@ -359,7 +391,7 @@ def test_deleting_either_side_removes_their_suggestion_lists_and_items(full_worl
         flags = [
             r["from_suggestion"] for r in records.list_meal_items(full_world, *[world.SHARED] * 2)
         ]
-        assert sorted(flags) == [0, 1]
+        assert sorted(flags) == [0, 0, 1]  # the world's meal, the recipe's (T11.8), the list's
 
 
 @pytest.mark.parametrize("user", [world.SHARED, world.COACH_A])

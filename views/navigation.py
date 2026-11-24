@@ -6,9 +6,10 @@ home instead. A new session sees only the start page (sign in, or in demo mode a
 guest) when sign-in is set up or in demo mode. A guest (a copy with no [auth]) has one page, the
 chat with today's tabs, so no menu shows. A user signed in with Google who has no account yet
 ("pending") sees only the welcome page. A coach has the chat, Clients (T9.12), Messages
-(T11.4b), Client week (T9.15), Notifications (T9.29) and My data; a gymer My profile, Today (the
-food and weight diary, T9.13), Meal plan (T11.7), Workouts (T9.14), My week (T9.15), Coach and
-sharing (T9.12), Messages (T11.4b), Notifications (T9.29) and My data, no chat (T9.24).
+(T11.4b), Client week (T9.15), Recipe library (T11.8), Notifications (T9.29) and My data; a gymer
+My profile, Today (the food and weight diary, T9.13), Meal plan (T11.7), Recipes (T11.8), Workouts
+(T9.14), My week (T9.15), Coach and sharing (T9.12), Messages (T11.4b), Notifications (T9.29) and
+My data, no chat (T9.24).
 """
 
 import streamlit as st
@@ -23,6 +24,8 @@ from views import (
     my_week,
     notifications,
     pages,
+    recipe_library,
+    recipes,
     sharing,
     today,
     workouts,
@@ -39,6 +42,8 @@ WORKOUTS = workouts.URL_PATH
 CLIENT_WEEK = client_week.URL_PATH
 MY_WEEK = my_week.URL_PATH
 MEAL_PLAN = meal_plan.URL_PATH
+RECIPE_LIBRARY = recipe_library.URL_PATH
+RECIPES = recipes.URL_PATH
 NOTIFICATIONS = notifications.URL_PATH
 MESSAGES = messages.URL_PATH
 WELCOME = "welcome"
@@ -50,15 +55,18 @@ PAGES_BY_ROLE: dict[str | None, tuple[str, ...]] = {
     START: (START,),
     PENDING: (WELCOME,),
     # Both roles have the Notifications page before My data (T9.29), and Messages (T11.4b) after
-    # the page where the relationship starts (Clients, Coach and sharing).
-    "coach": (CHAT, CLIENTS, MESSAGES, CLIENT_WEEK, NOTIFICATIONS, MY_DATA),
+    # the page where the relationship starts (Clients, Coach and sharing). The coach's Recipe
+    # library (T11.8) comes after Client week.
+    "coach": (CHAT, CLIENTS, MESSAGES, CLIENT_WEEK, RECIPE_LIBRARY, NOTIFICATIONS, MY_DATA),
     # No chat for a gymer (T9.24): the profile, the diary (T9.13; the profile stays the home), the
     # workouts (T9.14), the coach (T9.12), their week with the approved reviews (T9.15), their
-    # coach's meal plan (T11.7, read-only, after Today) and their data.
+    # coach's meal plan (T11.7, read-only, after Today), their coach's recipes (T11.8, after the
+    # plan) and their data.
     "gymer": (
         PROFILE,
         TODAY,
         MEAL_PLAN,
+        RECIPES,
         WORKOUTS,
         MY_WEEK,
         SHARING,
@@ -77,6 +85,8 @@ _PAGES = {
     CLIENT_WEEK: (client_week.page, "page.client_week", ":material/calendar_month:"),
     MY_WEEK: (my_week.page, "page.my_week", ":material/calendar_month:"),
     MEAL_PLAN: (meal_plan.page, "page.meal_plan", ":material/menu_book:"),
+    RECIPE_LIBRARY: (recipe_library.page, "page.recipe_library", ":material/cooking:"),
+    RECIPES: (recipes.page, "page.recipes", ":material/cooking:"),
     NOTIFICATIONS: (notifications.page, "page.notifications", notifications.ICON),
     MESSAGES: (messages.page, "page.messages", ":material/forum:"),
     MY_DATA: (my_data.page, "page.my_data", ":material/folder_shared:"),

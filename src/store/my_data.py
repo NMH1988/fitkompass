@@ -7,11 +7,14 @@ with the reviews' evidence and scopes), the questions to the coach and the answe
 approved ones among them (T9.25), the audit rows by or about them, the user's own notification
 read mark (T9.29; never the other side's), the foods coaches suggested to them (T9.34), every
 message of the threads they are a side of, both sides' messages, ended relationships' too (T11.3),
-and the meal plans coaches wrote for them (T11.7).
+the meal plans coaches wrote for them (T11.7), a coach's own recipes with every version and food,
+and a gymer's own ratings of recipes (T11.8; never the other side's).
 The delete removes the user's rows in every table, their relationships and scopes, the reviews about
 them and those they wrote as a coach (with their evidence, questions and answers), every question or
 answer the user wrote, the lists of suggested foods between the user and a coach or client (T9.34)
-and the meal plans between them (T11.7), the messages of every thread the user is a side of (T11.3),
+and the meal plans between them (T11.7), a coach's recipes with their versions, foods and every
+client's rating of them, and the ratings the user gave (T11.8; the meal items gymers logged from a
+deleted recipe stay theirs), the messages of every thread the user is a side of (T11.3),
 so a thread goes when either side deletes their data, the invitations and code attempts, the read
 mark, and the audit rows by or about them: the app is local and keeps no audit duty (the owner may
 change this). It runs in one transaction with foreign keys on, and no reference cascades, so a table
@@ -166,6 +169,22 @@ SELECT item.* FROM meal_plan_items AS item
 JOIN meal_plans AS plan ON plan.id = item.plan_id
 WHERE plan.client_id = ? ORDER BY item.id
 """
+# A coach's own recipes, every version and food (T11.8): the coach's content. The ratings of them
+# are the gymers' data, in the gymers' exports only.
+_RECIPES = "SELECT * FROM recipes WHERE coach_id = ? ORDER BY id"
+_RECIPE_VERSIONS = """
+SELECT version.* FROM recipe_versions AS version
+JOIN recipes AS recipe ON recipe.id = version.recipe_id
+WHERE recipe.coach_id = ? ORDER BY version.id
+"""
+_RECIPE_INGREDIENTS = """
+SELECT ingredient.* FROM recipe_ingredients AS ingredient
+JOIN recipe_versions AS version ON version.id = ingredient.version_id
+JOIN recipes AS recipe ON recipe.id = version.recipe_id
+WHERE recipe.coach_id = ? ORDER BY ingredient.id
+"""
+# The ratings the user gave as a client (T11.8).
+_RATINGS = "SELECT * FROM recipe_ratings WHERE client_id = ? ORDER BY id"
 # The messages of every thread the user is a side of, active or ended, both sides' (T11.3): both
 # sides read the whole thread, so both exports hold it.
 _MESSAGES = """
@@ -202,6 +221,25 @@ DELETE FROM meal_plan_items
 WHERE plan_id IN (SELECT id FROM meal_plans WHERE client_id = ? OR coach_id = ?)
 """
 _DELETE_MEAL_PLANS = "DELETE FROM meal_plans WHERE client_id = ? OR coach_id = ?"
+# The ratings the user gave and every rating of the user's recipes, then the recipes' foods,
+# versions and the recipes (T11.8). meal_items.from_recipe has no foreign key, so a gymer's logged
+# meals stay as they are when their coach's recipes go.
+_DELETE_RATINGS = """
+DELETE FROM recipe_ratings
+WHERE client_id = ? OR recipe_id IN (SELECT id FROM recipes WHERE coach_id = ?)
+"""
+_DELETE_RECIPE_INGREDIENTS = """
+DELETE FROM recipe_ingredients
+WHERE version_id IN (
+    SELECT version.id FROM recipe_versions AS version
+    JOIN recipes AS recipe ON recipe.id = version.recipe_id
+    WHERE recipe.coach_id = ?
+)
+"""
+_DELETE_RECIPE_VERSIONS = """
+DELETE FROM recipe_versions WHERE recipe_id IN (SELECT id FROM recipes WHERE coach_id = ?)
+"""
+_DELETE_RECIPES = "DELETE FROM recipes WHERE coach_id = ?"
 # The workflow threads of the reviews about the user or by them (T9.16), deleted with them.
 _THREADS = """
 SELECT thread_id FROM ai_reviews
@@ -293,6 +331,10 @@ def export_user_data(conn: sqlite3.Connection, user_id: str) -> str:
             "messages": [dict(r) for r in conn.execute(_MESSAGES, both)],
             "meal_plans": [dict(r) for r in conn.execute(_MEAL_PLANS, one)],
             "meal_plan_items": [dict(r) for r in conn.execute(_MEAL_PLAN_ITEMS, one)],
+            "recipes": [dict(r) for r in conn.execute(_RECIPES, one)],
+            "recipe_versions": [dict(r) for r in conn.execute(_RECIPE_VERSIONS, one)],
+            "recipe_ingredients": [dict(r) for r in conn.execute(_RECIPE_INGREDIENTS, one)],
+            "recipe_ratings": [dict(r) for r in conn.execute(_RATINGS, one)],
         }
     return json.dumps(document, ensure_ascii=False, indent=2)
 
@@ -324,6 +366,10 @@ def delete_user_data(
         conn.execute(_DELETE_SUGGESTION_LISTS, both)
         conn.execute(_DELETE_MEAL_PLAN_ITEMS, both)
         conn.execute(_DELETE_MEAL_PLANS, both)
+        conn.execute(_DELETE_RATINGS, both)
+        conn.execute(_DELETE_RECIPE_INGREDIENTS, one)
+        conn.execute(_DELETE_RECIPE_VERSIONS, one)
+        conn.execute(_DELETE_RECIPES, one)
         conn.execute(_DELETE_AUDIT, both)
         conn.execute(_DELETE_MESSAGES, (user_id, user_id, user_id))
         conn.execute(_DELETE_CONSENTS, both)

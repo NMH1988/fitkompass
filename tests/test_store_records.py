@@ -359,9 +359,13 @@ PROFILE_WITH_TARGET = {
 
 
 def test_every_add_function_is_in_the_gymer_only_test():
-    """ADDS lists every add_* function but a coach's (add_preference, add_client_target)."""
+    """ADDS lists every add_* function but a coach's and the recipe log (tested on its own)."""
     coaches = {"add_preference", "add_client_target"}
-    assert {name for name in dir(records) if name.startswith("add_")} == {*ADDS, *coaches}
+    # T11.8: a recipe is logged only from the gymer's current coach's recipe, so the one call below
+    # cannot work for any gymer; tests/test_store_access.py refuses a coach and a missing user.
+    recipe_log = {"add_recipe_items"}
+    found = {name for name in dir(records) if name.startswith("add_")}
+    assert found == {*ADDS, *coaches, *recipe_log}
 
 
 @pytest.mark.parametrize("add", ADDS)

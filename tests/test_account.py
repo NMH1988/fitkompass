@@ -7,10 +7,12 @@ from datetime import date, timedelta
 
 import pytest
 
-from src import account, config, demo, observability
+from src import account, config, demo, observability, recipes
 from src.profile import UserProfile
 from src.store import db, messages, records, users
 from src.store import meal_plans as store_meal_plans
+from src.store import ratings as store_ratings
+from src.store import recipes as store_recipes
 from src.store.access import NotFound
 
 SECRET = "s" * config.USER_KEY_SECRET_MIN_CHARS
@@ -358,6 +360,29 @@ def test_the_demo_gymer_has_the_coach_s_meal_plan(store_conn):
     assert [(i["meal"], i["food_name"], i["grams"]) for i in plan["items"]] == list(demo.MEAL_PLAN)
     assert sum(item["kcal"] for item in plan["items"]) >= config.CALORIE_FLOOR_KCAL
     assert store_meal_plans.current_meal_plan(store_conn, kim, kim) is None
+
+
+def test_the_demo_coach_has_recipes_rated_by_two_clients_so_sam_s_rating_shows_the_average(
+    store_conn,
+):
+    """Two made-up recipes; Jo and Lee logged and rated the first; Sam's rating makes three."""
+    demo.seed(store_conn)
+    coach, sam = demo.COACH.id, demo.SHARING_GYMER.id
+    found = store_recipes.list_recipes(store_conn, coach)
+    assert [recipe["name"] for recipe in found] == [name for name, _s, _r in demo.RECIPES]
+    first = found[0]["id"]
+    assert store_ratings.rating_summaries(store_conn, coach) == {}  # two raters only
+    for rater in demo.RATERS:
+        items = records.list_meal_items(store_conn, rater.id, rater.id)
+        assert {item["from_recipe"] for item in items} == {first}
+    assert [r["name"] for r in store_recipes.list_recipes(store_conn, sam)] == [
+        recipe["name"] for recipe in found
+    ]
+    recipes.log_recipe(store_conn, sam, first, factor=1.0, meal="breakfast", day=account.today())
+    recipes.rate_recipe(store_conn, sam, first, 3)
+    assert store_ratings.rating_summaries(store_conn, coach) == {first: (4.0, 3)}
+    # Kim has no coach and reads none.
+    assert store_recipes.list_recipes(store_conn, demo.OTHER_GYMER.id) == []
 
 
 def test_the_demo_users_are_made_up():
