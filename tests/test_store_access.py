@@ -22,6 +22,8 @@ from src.store import (
     meal_plans,
     messages,
     questions,
+    ratings,
+    recipes,
     records,
     reviews,
     suggestions,
@@ -104,6 +106,9 @@ OWN_ONLY = {
     # T9.34: whether an item is on the user's own active list; called by records.add_meal_item()
     # inside its write transaction, for the user it writes for.
     "suggestions.is_active_item",
+    # T11.8: whether a recipe is the gymer's current coach's; called by records.add_recipe_items()
+    # and the ratings inside their transactions, for the user they write or read for.
+    "recipes.recipe_for_client",
     # T11.5: the gymer's own Art. 9 consents (a coach, another user or a foreign relationship gets
     # NotFound, and is_given() False; tests/test_store_ai_consents.py).
     "ai_consents.current",
@@ -200,6 +205,23 @@ NAME_READS = {"users.display_name_of"}
 # written by them only while the relationship is active, checked by the relationship itself (no
 # scope) and not audited (owner's choices, 2026-11-19); tested at the end of this file.
 THREAD_FUNCTIONS = {"messages.send_message", "messages.list_messages"}
+
+# The coach's recipe library and the clients' ratings (T11.8): a recipe is the coach's own content,
+# written and deleted only by its coach and read by the coach's current clients, checked by the
+# relationship itself (no scope) and not audited; a meal logged from it and a rating need the
+# gymer's current coach to be the recipe's; the coach reads only an average and a count of clients
+# who share nutrition, from a minimum, not audited (owner's choices, 2026-11-19). Tested at the end
+# of this file, and in tests/test_store_recipes.py.
+RECIPE_FUNCTIONS = {
+    "recipes.save_recipe",
+    "recipes.delete_recipe",
+    "recipes.list_recipes",
+    "records.add_recipe_items",
+    "ratings.rate_recipe",
+    "ratings.can_rate",
+    "ratings.own_rating",
+    "ratings.rating_summaries",
+}
 
 
 # SQL that filters on a relationship being active or not ended (a comparison, IN, LIKE, GLOB or
@@ -336,6 +358,7 @@ def test_every_public_store_function_is_classified():
         NAME_READS,
         set(COACH_WRITES),
         THREAD_FUNCTIONS,
+        RECIPE_FUNCTIONS,
     ]
     assert found == set().union(*groups)
     assert sum(len(group) for group in groups) == len(found)  # no function in two groups
@@ -638,6 +661,7 @@ def test_a_name_without_a_relationship_is_not_found(store_conn, relationships, c
 def test_a_gymer_does_not_see_a_coachs_name_before_accepting(store_conn, relationships):
     """An invitation joins nobody: the coach's name is not found until the code is accepted."""
     users.create_user(store_conn, "gym-new", "gymer", "Newcomer")
+    world.add_records(store_conn, "gym-new")  # a saved profile, which a code needs (T11.17)
     new = invitations.create_invitation(store_conn, world.COACH_B)
     with pytest.raises(access.NotFound):
         users.display_name_of(store_conn, "gym-new", world.COACH_B)
@@ -997,3 +1021,175 @@ def test_a_message_is_never_changed_in_place(store_conn, relationships):
     messages.send_message(store_conn, world.SHARED, relationships[world.SHARED], TEXT)
     with pytest.raises(sqlite3.IntegrityError, match="never changed in place"):
         store_conn.execute("UPDATE messages SET text = 'changed'")
+
+
+# --- The coach's recipes and the clients' ratings (T11.8) ----------------------------------------
+
+OATS = recipes.Ingredient(123, "Oats, rolled", 80.0, 304.8, 10.6, 54.1, 5.2, 8.0)
+# Users who read coach A's recipes: the coach and the clients connected with them now (sharing or
+# not); everyone else reads none, or gets NotFound when they are not a user.
+RECIPE_READERS = {
+    "the coach": world.COACH_A,
+    "a client sharing everything": world.SHARED,
+    "a client sharing nothing": world.UNSHARED,
+}
+RECIPE_NON_READERS = {
+    "a former client": world.ENDED,
+    "another coach's client": world.OTHERS,
+    "another coach": world.COACH_B,
+}
+# Who may not edit or delete coach A's recipe: every case is the same NotFound.
+RECIPE_NON_WRITERS = {
+    "another coach": world.COACH_B,
+    "a client": world.SHARED,
+    "a missing user": world.MISSING,
+    "an ID that is not text": None,
+}
+# Who may not log or rate coach A's recipe.
+RECIPE_NON_RATERS = {
+    "a former client": world.ENDED,
+    "another coach's client": world.OTHERS,
+    "the coach": world.COACH_A,
+    "another coach": world.COACH_B,
+    "a missing user": world.MISSING,
+}
+
+
+def _recipe(conn, coach=world.COACH_A):
+    """Save a one-food recipe as the coach; return its ID."""
+    return recipes.save_recipe(
+        conn, coach, None, name="Overnight oats", steps="Soak overnight.", ingredients=[OATS]
+    )
+
+
+def _log(conn, gymer, recipe_id):
+    """Log the recipe for the gymer at its own grams; return the new items' IDs."""
+    return records.add_recipe_items(
+        conn, gymer, recipe_id, consumed_on=world.DAY, meal="breakfast", factor=1.0
+    )
+
+
+def _rows(conn, table):
+    """Return how many rows a table holds (test-only SQL with the test's own table names)."""
+    return conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
+
+
+@pytest.mark.parametrize("case", RECIPE_READERS)
+def test_the_coach_and_their_current_clients_read_the_recipes_with_no_audit(
+    store_conn, relationships, case
+):
+    """The coach and every current client, sharing or not, read the recipe; nothing is audited."""
+    recipe_id = _recipe(store_conn)
+    found = recipes.list_recipes(store_conn, RECIPE_READERS[case])
+    assert [(r["id"], r["name"]) for r in found] == [(recipe_id, "Overnight oats")]
+    assert _audit_rows(store_conn) == []
+
+
+@pytest.mark.parametrize("case", RECIPE_NON_READERS)
+def test_anyone_else_reads_none_of_the_coach_s_recipes(store_conn, relationships, case):
+    """A former client, another coach's client and another coach see none of coach A's recipes."""
+    _recipe(store_conn)
+    assert recipes.list_recipes(store_conn, RECIPE_NON_READERS[case]) == []
+
+
+@pytest.mark.parametrize("bad", [world.MISSING, None, 5, ""])
+def test_a_reader_that_is_not_a_user_gets_not_found(store_conn, relationships, bad):
+    """A missing user or a value that is not an ID gets NotFound."""
+    with pytest.raises(access.NotFound):
+        recipes.list_recipes(store_conn, bad)
+
+
+@pytest.mark.parametrize("case", RECIPE_NON_WRITERS)
+def test_only_the_recipe_s_coach_edits_or_deletes_it(store_conn, relationships, case):
+    """Everyone else gets the same NotFound and writes nothing, the recipe left as it was."""
+    recipe_id = _recipe(store_conn)
+    actor = RECIPE_NON_WRITERS[case]
+    tables = ("recipes", "recipe_versions", "recipe_ingredients")
+    before = [_rows(store_conn, table) for table in tables]
+    with pytest.raises(access.NotFound):
+        recipes.save_recipe(
+            store_conn, actor, recipe_id, name="Changed", steps="Changed.", ingredients=[OATS]
+        )
+    with pytest.raises(access.NotFound):
+        recipes.delete_recipe(store_conn, actor, recipe_id)
+    assert [_rows(store_conn, table) for table in tables] == before
+
+
+@pytest.mark.parametrize("actor", [world.SHARED, world.MISSING, None])
+def test_only_a_coach_writes_a_new_recipe(store_conn, relationships, actor):
+    """A gymer, a missing user or a value that is not an ID gets NotFound and writes nothing."""
+    with pytest.raises(access.NotFound):
+        _recipe(store_conn, actor)
+    assert _rows(store_conn, "recipes") == 0
+
+
+@pytest.mark.parametrize("case", RECIPE_NON_RATERS)
+def test_anyone_but_a_current_client_gets_not_found_and_writes_nothing(
+    store_conn, relationships, case
+):
+    """Logging and rating coach A's recipe is refused alike, with no meal item and no rating."""
+    recipe_id = _recipe(store_conn)
+    actor = RECIPE_NON_RATERS[case]
+    meals = _rows(store_conn, "meal_items")
+    with pytest.raises(access.NotFound):
+        _log(store_conn, actor, recipe_id)
+    with pytest.raises(access.NotFound):
+        ratings.rate_recipe(store_conn, actor, recipe_id, 5)
+    assert ratings.can_rate(store_conn, actor, recipe_id) is False
+    assert _rows(store_conn, "meal_items") == meals
+    assert _rows(store_conn, "recipe_ratings") == 0
+
+
+def test_a_former_client_who_logged_it_may_rate_it_no_more(store_conn, relationships):
+    """A client who logged the recipe and then ended the relationship gets NotFound."""
+    recipe_id = _recipe(store_conn)
+    _log(store_conn, world.SHARED, recipe_id)
+    users.end_relationship(store_conn, world.SHARED, relationships[world.SHARED])
+    with pytest.raises(access.NotFound):
+        ratings.rate_recipe(store_conn, world.SHARED, recipe_id, 4)
+    assert _rows(store_conn, "recipe_ratings") == 0
+
+
+def test_a_current_client_who_has_not_logged_it_gets_not_found(store_conn, relationships):
+    """Reading a recipe is not enough: only a client who logged its dish rates it."""
+    recipe_id = _recipe(store_conn)
+    assert ratings.can_rate(store_conn, world.SHARED, recipe_id) is False
+    with pytest.raises(access.NotFound):
+        ratings.rate_recipe(store_conn, world.SHARED, recipe_id, 4)
+    assert _rows(store_conn, "recipe_ratings") == 0
+
+
+@pytest.mark.parametrize("bad", [9999, 0, -1, "1", True, 1.0, None])
+def test_a_recipe_that_is_not_one_gets_not_found(store_conn, relationships, bad):
+    """A missing recipe or a value that is not a row ID is refused alike."""
+    with pytest.raises(access.NotFound):
+        _log(store_conn, world.SHARED, bad)
+    with pytest.raises(access.NotFound):
+        ratings.rate_recipe(store_conn, world.SHARED, bad, 4)
+    with pytest.raises(access.NotFound):
+        recipes.delete_recipe(store_conn, world.COACH_A, bad)
+    if bad is None:
+        return  # save_recipe() takes None for a new recipe
+    with pytest.raises(access.NotFound):
+        recipes.save_recipe(
+            store_conn, world.COACH_A, bad, name="X", steps="Y.", ingredients=[OATS]
+        )
+
+
+def test_a_mark_whose_recipe_is_gone_allows_no_rating(store_conn, relationships):
+    """After the coach deletes the recipe, the logged meal stays marked but rates nothing."""
+    recipe_id = _recipe(store_conn)
+    _log(store_conn, world.SHARED, recipe_id)
+    recipes.delete_recipe(store_conn, world.COACH_A, recipe_id)
+    items = records.list_meal_items(store_conn, world.SHARED, world.SHARED)
+    assert [item["from_recipe"] for item in items].count(recipe_id) == 1
+    assert ratings.can_rate(store_conn, world.SHARED, recipe_id) is False
+    with pytest.raises(access.NotFound):
+        ratings.rate_recipe(store_conn, world.SHARED, recipe_id, 4)
+
+
+@pytest.mark.parametrize("actor", [world.SHARED, world.MISSING, None])
+def test_only_a_coach_reads_rating_summaries(store_conn, relationships, actor):
+    """A gymer, a missing user or a value that is not an ID gets NotFound."""
+    with pytest.raises(access.NotFound):
+        ratings.rating_summaries(store_conn, actor)

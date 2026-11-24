@@ -11,7 +11,9 @@ is the gymer's to read, never to delete alone (`delete_record()` refuses it; onl
 nutrition with a coach (`add_profile_with_target()`). The other one is a coach's list of suggested
 foods (`suggestions.add_client_suggestions()`, T9.34); a meal item the gymer logs from it is flagged
 `from_suggestion` here, after the store checked the item is on the gymer's active list, and an edit
-keeps the flag only for the same food.
+keeps the flag only for the same food. A recipe of the gymer's current coach (T11.8) is logged here
+too (`add_recipe_items()`): one item per food, scaled by the factor the gymer chose, each marked
+`from_recipe` with the recipe's ID, kept by an edit under the same rule.
 
 Each `list_*` takes the acting user and the user whose data it reads and goes through
 `access.authorised_read()`: the user's own data, or a coach's read within the scope the data
@@ -32,7 +34,7 @@ from typing import Literal, get_args
 
 from src import config, exercises, metrics
 from src.profile import ActivityLevel, Goal, Sex
-from src.store import suggestions, values
+from src.store import recipes, suggestions, values
 from src.store.access import NotFound, audit, authorise_read, authorised_read, role_of
 from src.store.db import checkpoint, transaction
 
@@ -58,6 +60,7 @@ _PROFILES = """
 SELECT id, height_cm, age, sex, activity, goal, recorded_at
 FROM profile_entries WHERE user_id = ? ORDER BY recorded_at, id
 """
+_HAS_PROFILE = "SELECT 1 FROM profile_entries WHERE user_id = ? LIMIT 1"
 _ADD_WEIGHT = """
 INSERT INTO body_measurements (user_id, weight_kg, measured_on, recorded_at) VALUES (?, ?, ?, ?)
 """
@@ -86,14 +89,17 @@ _SHARES_NUTRITION = "SELECT 1 FROM open_shares WHERE client_id = ? AND scope = '
 _ADD_MEAL = """
 INSERT INTO meal_items (
     user_id, consumed_on, meal, fdc_id, food_name, grams,
-    kcal, protein_g, carbohydrate_g, fat_g, fiber_g, recorded_at, from_suggestion
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    kcal, protein_g, carbohydrate_g, fat_g, fiber_g, recorded_at, from_suggestion, from_recipe
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
-# An edited item keeps its from_suggestion flag only with the same food (T9.34).
-_MEAL_FOOD = "SELECT fdc_id, from_suggestion FROM meal_items WHERE id = ? AND user_id = ?"
+# An edited item keeps its from_suggestion flag (T9.34) and its from_recipe mark (T11.8) only with
+# the same food.
+_MEAL_FOOD = """
+SELECT fdc_id, from_suggestion, from_recipe FROM meal_items WHERE id = ? AND user_id = ?
+"""
 _MEALS = """
 SELECT id, consumed_on, meal, fdc_id, food_name, grams,
-    kcal, protein_g, carbohydrate_g, fat_g, fiber_g, recorded_at, from_suggestion
+    kcal, protein_g, carbohydrate_g, fat_g, fiber_g, recorded_at, from_suggestion, from_recipe
 FROM meal_items
 WHERE user_id = ? AND (? IS NULL OR consumed_on >= ?) AND (? IS NULL OR consumed_on <= ?)
 ORDER BY consumed_on, id
@@ -193,6 +199,12 @@ def list_profile_entries(conn: sqlite3.Connection, actor_id: str, subject_id: st
     with authorised_read(conn, actor_id, subject_id, "body", "profile_entries"):
         rows = conn.execute(_PROFILES, (subject_id,)).fetchall()
     return [dict(row) for row in rows]
+
+
+def _has_profile_entry(conn: sqlite3.Connection, user_id: str) -> bool:
+    """Return True if the user has a profile entry, inside the caller's transaction (T11.17)."""
+    # Every entry passed the age check of `_profile_row()`, so one entry is a declared adult age.
+    return conn.execute(_HAS_PROFILE, (user_id,)).fetchone() is not None
 
 
 def _weight_row(user_id: str, weight_kg: float, measured_on: date) -> tuple:
@@ -411,7 +423,7 @@ def add_meal_item(
             if not suggestions.is_active_item(conn, user_id, suggestion_item_id, row[2], row[3]):
                 raise NotFound
             flag = 1
-        return conn.execute(_ADD_MEAL, (*row, flag)).lastrowid
+        return conn.execute(_ADD_MEAL, (*row, flag, None)).lastrowid
 
 
 def replace_meal_item(
@@ -454,8 +466,59 @@ def replace_meal_item(
             raise NotFound
         # A food logged from the coach's suggestions keeps the flag while it stays the same food
         # (the grams, day or meal slot changed); another food no longer counts (T9.34).
-        flag = old["from_suggestion"] if old["fdc_id"] == row[3] else 0
-        return conn.execute(_ADD_MEAL, (*row, flag)).lastrowid
+        same_food = old["fdc_id"] == row[3]
+        flag = old["from_suggestion"] if same_food else 0
+        # A food logged from a recipe keeps its mark the same way (T11.8), so it still allows a
+        # rating; another food no longer counts as the recipe's.
+        recipe_id = old["from_recipe"] if same_food else None
+        return conn.execute(_ADD_MEAL, (*row, flag, recipe_id)).lastrowid
+
+
+def add_recipe_items(
+    conn: sqlite3.Connection,
+    user_id: str,
+    recipe_id: int,
+    *,
+    consumed_on: date,
+    meal: Meal,
+    factor: float,
+) -> list[int]:
+    """Log a recipe of the gymer's current coach, scaled by a factor; return the new items' IDs."""
+    # One meal item per food of the recipe's newest version, its grams and nutrients times the
+    # factor, each marked from_recipe; all in one transaction, after the store checked the recipe
+    # is the current coach's (T11.8), so a recipe deleted or a relationship ended in between is
+    # NotFound with nothing written. A scaled food outside the food log's gram range is refused.
+    values.user_id(user_id)
+    values.date_text(consumed_on, "consumed_on")
+    values.choice(meal, "meal", get_args(Meal))
+    checked_factor = values.in_range(factor, "factor", config.RECIPE_PORTION_RANGE)
+    with transaction(conn):
+        _check_gymer(conn, user_id)
+        recipe = recipes.recipe_for_client(conn, user_id, recipe_id)
+        if recipe is None:
+            raise NotFound
+        ids = []
+        for food in recipe["ingredients"]:
+            grams = values.in_range(
+                food["grams"] * checked_factor,
+                "grams",
+                (config.FOOD_MIN_GRAMS, config.FOOD_MAX_GRAMS),
+            )
+            row = _meal_row(
+                user_id,
+                consumed_on,
+                meal,
+                food["fdc_id"],
+                food["food_name"],
+                grams,
+                food["kcal"] * checked_factor,
+                food["protein_g"] * checked_factor,
+                food["carbohydrate_g"] * checked_factor,
+                food["fat_g"] * checked_factor,
+                None if food["fiber_g"] is None else food["fiber_g"] * checked_factor,
+            )
+            ids.append(conn.execute(_ADD_MEAL, (*row, 0, recipe["id"])).lastrowid)
+        return ids
 
 
 def _meal_row(
@@ -543,9 +606,10 @@ def _checked_sets(sets: Sequence[ExerciseSet]) -> list[tuple]:
     ]
 
 
-def _write_meal(conn: sqlite3.Connection, row: tuple, from_suggestion: int = 0) -> int:
+def _write_meal(conn: sqlite3.Connection, row: tuple) -> int:
     """Write a checked meal item row inside the caller's transaction; return its ID."""
-    return conn.execute(_ADD_MEAL, (*row, from_suggestion)).lastrowid
+    # A drafted entry (T11.5) is neither from a coach's suggestion nor from a recipe.
+    return conn.execute(_ADD_MEAL, (*row, 0, None)).lastrowid
 
 
 def _write_weight(conn: sqlite3.Connection, row: tuple) -> int:

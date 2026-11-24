@@ -3,9 +3,11 @@
 The functions that change shared data take the acting user and check that the change is theirs to
 make: a client turns their own scopes on or off, and either side ends a relationship. Two take no
 acting user, so only their callers may decide when they run: `create_user()` (T9.5, at the first
-sign-in) and `start_relationship()`, the low-level step behind an accepted invitation code
-(`invitations.accept_invitation()` runs the same steps in its own transaction; it checks the two
-roles and that the gymer has no coach yet, but not a code). A gymer has one coach at a time (T9.12).
+sign-in) and `start_relationship()`, the low-level step for the demo seed's synthetic users only:
+it checks the two roles and that the gymer has no coach yet, but neither a code nor a saved profile
+(T11.17), so a real gymer reaches a coach only through `invitations.accept_invitation()`, which
+runs the same steps in its own transaction after both checks. A gymer has one coach at a time
+(T9.12).
 `find_user()` checks no access and must get only the signed-in user's own ID. `display_name_of()` is
 the one read of another user's data that does not go through `access.authorised_read()`: it checks
 the relationship itself and is not audited (T9.12).
@@ -98,7 +100,9 @@ def _grant(conn: sqlite3.Connection, relationship_id: int, scope: Scope) -> None
 
 
 def start_relationship(conn: sqlite3.Connection, coach_id: str, client_id: str) -> int:
-    """Pair a coach and a gymer with no scope shared; only a valid code may lead here (T9.12)."""
+    """Pair a coach and a gymer with no scope shared; for the demo seed only, no profile check."""
+    # A real gymer connects only through invitations.accept_invitation(), which also needs a
+    # saved profile, so a declared adult age (T11.17); tests/test_store_invitations.py scans this.
     with transaction(conn):
         return _open_relationship(conn, coach_id, client_id)
 

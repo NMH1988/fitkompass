@@ -1,8 +1,8 @@
 """Accepting an invitation code for the pages, with a log line when it is refused (T9.12).
 
 The store writes no log lines (T9.6), and `views/` writes none either (tests/test_observability.py),
-so the refusal is logged here: the event and the reason only ("not_valid", "limit" or
-"has_coach"), never the typed code, the user or a scope (.claude/rules/security-privacy.md).
+so the refusal is logged here: the event and the reason only ("not_valid", "limit", "has_coach"
+or "no_profile"), never the typed code, the user or a scope (.claude/rules/security-privacy.md).
 """
 
 import logging

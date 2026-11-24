@@ -49,7 +49,7 @@ What is stored and who sees it: `docs/PRD.md` "The privacy change" and `docs/SEC
 
 ## Demo mode (T9.5, D18)
 
-For a reviewer or a clone with no Google client: set `DEMO_MODE = true` in `.streamlit/secrets.toml` (or the environment variable `DEMO_MODE=1`) and leave the `[auth]` section out (with `[auth]` demo mode is ignored). The start page offers a "Demo user" picker (no guest) with three made-up users (`src/demo.py`: a coach, a gymer who shares body and nutrition with that coach, and a gymer with no coach), on a temporary database seeded when the app starts and deleted when it stops; `data/store/` is not touched. Never turn demo mode on for a deployment that real people use: anyone at the browser can pick any demo user.
+For a reviewer or a clone with no Google client: set `DEMO_MODE = true` in `.streamlit/secrets.toml` (or the environment variable `DEMO_MODE=1`) and leave the `[auth]` section out (with `[auth]` demo mode is ignored). The start page offers a "Demo user" picker (no guest) with five made-up users (`src/demo.py`: a coach, a gymer who shares body and nutrition with that coach, a gymer with no coach and, from T11.8, two more clients of the coach who share nutrition and rated one of the coach's recipes), on a temporary database seeded when the app starts and deleted when it stops; `data/store/` is not touched. Never turn demo mode on for a deployment that real people use: anyone at the browser can pick any demo user.
 
 ## Tracing with LangSmith (T9.8, D19)
 

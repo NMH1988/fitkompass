@@ -566,7 +566,81 @@ BEGIN SELECT RAISE(ABORT, 'stored records are never changed in place'); END;
 PRAGMA user_version = 9;
 """
 
-# T11.5 (migration 10, D25): the gymer's Art. 9 consents to send data to a model, one purpose each
+# T11.8 (migration 10): the coach's recipe library and the clients' ratings. A recipe is the coach's
+# own content: its ID and owner in `recipes`, keyed with AUTOINCREMENT so a deleted recipe's ID is
+# never given to another one (a gymer's meal items keep it), and its text and foods in versions, as
+# an edit is a new version (the newest is the recipe), so no row is changed in place and a recipe
+# keeps its ID, its ratings and the marks on logged meals through an edit. Each ingredient keeps the
+# nutrients of its grams from the USDA table when the version was saved, as meal_plan_items do, so
+# the store scales them itself when a gymer logs the recipe. A rating is the gymer's: a new one is a
+# new row and the newest per client counts. meal_items gains `from_recipe`, the recipe's ID with no
+# foreign key, so a coach's delete leaves the gymer's logged meals as they are; only
+# records.add_recipe_items() sets it, after the store checked the recipe is the gymer's current
+# coach's. The lengths and counts are checked in code against config (recipes.save_recipe()).
+_V10 = """
+CREATE TABLE recipes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    coach_id TEXT NOT NULL REFERENCES users (id),
+    created_at TEXT NOT NULL
+        CHECK (created_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T*+00:00'
+            AND date(created_at) IS substr(created_at, 1, 10))
+) STRICT;
+CREATE INDEX recipes_coach ON recipes (coach_id);
+CREATE TRIGGER recipes_never_changed BEFORE UPDATE ON recipes
+BEGIN SELECT RAISE(ABORT, 'stored records are never changed in place'); END;
+
+CREATE TABLE recipe_versions (
+    id INTEGER PRIMARY KEY,
+    recipe_id INTEGER NOT NULL REFERENCES recipes (id),
+    name TEXT NOT NULL CHECK (length(trim(name)) > 0),
+    steps TEXT NOT NULL CHECK (length(trim(steps)) > 0),
+    created_at TEXT NOT NULL
+        CHECK (created_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T*+00:00'
+            AND date(created_at) IS substr(created_at, 1, 10))
+) STRICT;
+CREATE INDEX recipe_versions_recipe ON recipe_versions (recipe_id);
+CREATE TRIGGER recipe_versions_never_changed BEFORE UPDATE ON recipe_versions
+BEGIN SELECT RAISE(ABORT, 'stored records are never changed in place'); END;
+
+CREATE TABLE recipe_ingredients (
+    id INTEGER PRIMARY KEY,
+    version_id INTEGER NOT NULL REFERENCES recipe_versions (id),
+    fdc_id INTEGER NOT NULL CHECK (fdc_id > 0),
+    food_name TEXT NOT NULL CHECK (length(food_name) > 0),
+    grams REAL NOT NULL CHECK (grams > 0),
+    kcal REAL NOT NULL CHECK (kcal >= 0),
+    protein_g REAL NOT NULL CHECK (protein_g >= 0),
+    carbohydrate_g REAL NOT NULL CHECK (carbohydrate_g >= 0),
+    fat_g REAL NOT NULL CHECK (fat_g >= 0),
+    fiber_g REAL CHECK (fiber_g IS NULL OR fiber_g >= 0),
+    UNIQUE (version_id, fdc_id)
+) STRICT;
+CREATE INDEX recipe_ingredients_version ON recipe_ingredients (version_id);
+CREATE TRIGGER recipe_ingredients_never_changed BEFORE UPDATE ON recipe_ingredients
+BEGIN SELECT RAISE(ABORT, 'stored records are never changed in place'); END;
+
+CREATE TABLE recipe_ratings (
+    id INTEGER PRIMARY KEY,
+    recipe_id INTEGER NOT NULL REFERENCES recipes (id),
+    client_id TEXT NOT NULL REFERENCES users (id),
+    stars INTEGER NOT NULL CHECK (stars BETWEEN 1 AND 5),
+    created_at TEXT NOT NULL
+        CHECK (created_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T*+00:00'
+            AND date(created_at) IS substr(created_at, 1, 10))
+) STRICT;
+CREATE INDEX recipe_ratings_recipe ON recipe_ratings (recipe_id);
+CREATE INDEX recipe_ratings_client ON recipe_ratings (client_id);
+CREATE TRIGGER recipe_ratings_never_changed BEFORE UPDATE ON recipe_ratings
+BEGIN SELECT RAISE(ABORT, 'stored records are never changed in place'); END;
+
+ALTER TABLE meal_items ADD COLUMN from_recipe INTEGER
+    CHECK (from_recipe IS NULL OR from_recipe > 0);
+CREATE INDEX meal_items_from_recipe ON meal_items (user_id, from_recipe);
+
+PRAGMA user_version = 10;
+"""
+
+# T11.5 (migration 11, D25): the gymer's Art. 9 consents to send data to a model, one purpose each
 # (PRD "Consents (Art. 9)"), apart from the sharing scopes in `consents`, and the mark of a message
 # the drafting workflow has finished with.
 #
@@ -581,7 +655,7 @@ PRAGMA user_version = 9;
 # message_drafts: one row per message the workflow has finished with (its cards decided, no card
 # found, or refused by the guard), so it never reaches a model again; it refers to the message and
 # goes with it, and no logged entry refers to a message, so neither side's delete is blocked.
-_V10 = """
+_V11 = """
 CREATE TABLE ai_consents (
     id INTEGER PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users (id),
@@ -617,8 +691,8 @@ CREATE TABLE message_drafts (
 CREATE TRIGGER message_drafts_never_changed BEFORE UPDATE ON message_drafts
 BEGIN SELECT RAISE(ABORT, 'stored records are never changed in place'); END;
 
-PRAGMA user_version = 10;
+PRAGMA user_version = 11;
 """
 
 # In order: MIGRATIONS[0] creates version 1, MIGRATIONS[1] takes it to version 2, and so on.
-MIGRATIONS: tuple[str, ...] = (_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10)
+MIGRATIONS: tuple[str, ...] = (_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10, _V11)

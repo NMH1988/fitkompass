@@ -75,7 +75,8 @@ EN: dict[str, str] = {
     "my_data.intro_gymer": (
         "Everything the app stores about you: your account and your records below; your coach "
         "relationships, sharing choices, the foods your coaches suggested to you, the meal plans "
-        "your coaches set for you, your questions to the coach with the answers, your messages "
+        "your coaches set for you, your ratings of your coach's recipes, your questions to the "
+        "coach with the answers, your messages "
         "with your coaches (both sides' messages), your coach's reads of your data and your "
         "notification read mark (when you last marked your notifications as read) are in the "
         "export. Reading your messages is not recorded, for you or your coach, so those reads are "
@@ -88,7 +89,9 @@ EN: dict[str, str] = {
         "too), and your notification read mark (when you last marked your notifications as "
         "read); they are in the export. The foods you suggest to a client and the meal plans you "
         "set for them are stored as the client's data: your export holds when you saved each "
-        "list and plan. Nothing else of your chats with the AI is stored."
+        "list and plan. Your recipes, with every version and food, are in the export; your "
+        "clients' ratings of them are theirs, so only the average shows on your Recipe library. "
+        "Nothing else of your chats with the AI is stored."
     ),
     "my_data.account": "**Account:** {name} · {role} · created {created}",
     "my_data.count": "{count} stored",
@@ -140,7 +143,8 @@ EN: dict[str, str] = {
     "my_data.delete_all": "Delete everything",
     "my_data.delete_all_note": (
         "Deletes your account and every row about you, and every message thread you are a side "
-        "of, for both sides, then signs you out. This cannot be undone."
+        "of, for both sides; a coach's recipes go with every client's rating of them, while the "
+        "meals clients logged from them stay. Then signs you out. This cannot be undone."
     ),
     "my_data.confirm_delete_all": "Yes, delete my account and all my data",
     "my_data.delete_all_button": "Delete everything",
@@ -196,6 +200,15 @@ EN: dict[str, str] = {
     ),
     "sharing.refused.limit": "You have tried {attempts} codes today. Please try again tomorrow.",
     "sharing.refused.has_coach": "You have a coach already. End that relationship first.",
+    "sharing.refused.no_profile": (
+        "Save your details on My profile first, then enter the code again."
+    ),
+    "sharing.profile_first": (
+        "This app is for adults, so a coach can connect with you only after you have saved your "
+        "details, with your age, on My profile. Saving them first does not use up a code from "
+        "your coach: it works until it expires or your coach cancels it."
+    ),
+    "sharing.profile_link": "Go to My profile",
     "sharing.coach": "**Your coach:** {name} · since {since}",
     "sharing.what": "What your coach sees",
     "sharing.save": "Save sharing",
@@ -301,7 +314,8 @@ DE: dict[str, str] = {
     "my_data.intro_gymer": (
         "Alles, was die App über Sie speichert: Ihr Konto und unten Ihre Einträge; Ihre Coach- "
         "Beziehungen, Ihre Freigaben, die Lebensmittel, die Ihre Coachs Ihnen vorgeschlagen haben, "
-        "die Ernährungspläne, die Ihre Coachs für Sie festgelegt haben, Ihre Fragen an den Coach "
+        "die Ernährungspläne, die Ihre Coachs für Sie festgelegt haben, Ihre Bewertungen der "
+        "Rezepte Ihres Coachs, Ihre Fragen an den Coach "
         "mit den Antworten, Ihre Nachrichten mit Ihren Coachs (die beider Seiten), die Zugriffe "
         "Ihres Coachs auf Ihre Daten und Ihre Lesemarkierung der Benachrichtigungen (wann Sie sie "
         "zuletzt als gelesen markiert haben) stehen im Export. Das Lesen Ihrer Nachrichten wird "
@@ -316,8 +330,9 @@ DE: dict[str, str] = {
         "als gelesen markiert haben); sie stehen im Export. Die Lebensmittel, die Sie "
         "einem Klienten vorschlagen, und die Ernährungspläne, die Sie für ihn festlegen, werden "
         "als Daten des Klienten gespeichert: Ihr Export enthält, wann Sie jede Liste und jeden "
-        "Plan gespeichert haben. Sonst wird von Ihren Chats mit der KI "
-        "nichts gespeichert."
+        "Plan gespeichert haben. Ihre Rezepte mit jeder Fassung und jedem Lebensmittel stehen im "
+        "Export; die Bewertungen Ihrer Klienten gehören ihnen, daher zeigt Ihre Rezeptsammlung "
+        "nur den Durchschnitt. Sonst wird von Ihren Chats mit der KI nichts gespeichert."
     ),
     "my_data.account": "**Konto:** {name} · {role} · angelegt am {created}",
     "my_data.count": "{count} gespeichert",
@@ -370,8 +385,10 @@ DE: dict[str, str] = {
     "my_data.delete_all": "Alles löschen",
     "my_data.delete_all_note": (
         "Löscht Ihr Konto, jede Zeile über Sie und jeden Nachrichtenverlauf, an dem Sie beteiligt "
-        "sind, für beide Seiten, und meldet Sie dann ab. Das kann nicht rückgängig gemacht "
-        "werden."
+        "sind, für beide Seiten; die Rezepte eines Coachs gehen mit allen Bewertungen der "
+        "Klienten, die Mahlzeiten, die Klienten damit erfasst haben, bleiben. Danach werden Sie "
+        "abgemeldet. "
+        "Das kann nicht rückgängig gemacht werden."
     ),
     "my_data.confirm_delete_all": "Ja, mein Konto und alle meine Daten löschen",
     "my_data.delete_all_button": "Alles löschen",
@@ -434,6 +451,17 @@ DE: dict[str, str] = {
     "sharing.refused.has_coach": (
         "Sie haben bereits einen Coach. Beenden Sie zuerst diese Verbindung."
     ),
+    "sharing.refused.no_profile": (
+        "Speichern Sie zuerst Ihre Angaben unter Mein Profil und geben Sie den Code dann erneut "
+        "ein."
+    ),
+    "sharing.profile_first": (
+        "Diese App ist für Erwachsene, deshalb kann sich ein Coach erst mit Ihnen verbinden, wenn "
+        "Sie Ihre Angaben mit Ihrem Alter unter Mein Profil gespeichert haben. Ein Code Ihres "
+        "Coaches wird dadurch nicht verbraucht: Er gilt, bis er abläuft oder Ihr Coach ihn "
+        "zurückzieht."
+    ),
+    "sharing.profile_link": "Zu Mein Profil",
     "sharing.coach": "**Ihr Coach:** {name} · seit {since}",
     "sharing.what": "Was Ihr Coach sieht",
     "sharing.save": "Freigaben speichern",

@@ -776,6 +776,9 @@ STORE_CANARY_TEXTS = (
     "CANARY-FOOD",
     # T11.3: a message's text.
     "CANARY-MESSAGE",
+    # T11.8: a recipe's name and steps.
+    "CANARY-RECIPE",
+    "CANARY-STEPS",
 )
 
 
@@ -789,6 +792,8 @@ def _store_scenario(conn, codes: list[str]) -> list[Exception]:
         my_data,
         notifications,
         questions,
+        ratings,
+        recipes,
         records,
         reviews,
         suggestions,
@@ -855,6 +860,15 @@ def _store_scenario(conn, codes: list[str]) -> list[Exception]:
     codes.append(invitation.code)
     codes.append(invitation.code.replace("-", ""))
     invitations.list_invitations(conn, "CANARY-COACH")
+    # T11.17: before a saved profile even the valid code is refused, logged by reason only.
+    try:
+        sharing.accept_code(conn, "CANARY-NEW", invitation.code, ["body"])
+    except invitations.InvitationRefused as error:
+        errors.append(error)
+    records.add_profile_entry(
+        conn, "CANARY-NEW", height_cm=day.height_cm, age=day.age, sex=day.sex,
+        activity=day.activity, goal=day.goal,
+    )  # fmt: skip
     for typed, gymer in (("CANA-RYCA-NARY", "CANARY-NEW"), (invitation.code, "CANARY-GYM")):
         try:
             sharing.accept_code(conn, gymer, typed, ["body"])
@@ -915,6 +929,50 @@ def _store_scenario(conn, codes: list[str]) -> list[Exception]:
         lambda: suggestions.add_client_suggestions(
             conn, "CANARY-COACH", "CANARY-GYM",
             [suggestions.SuggestedFood("lunch", 1, "CANARY-FOOD too much", 2345.6)],
+        ),
+    ):  # fmt: skip
+        try:
+            refused_write()
+        except (access.NotFound, values.StoreValueError) as error:
+            errors.append(error)
+    # T11.8: a coach's recipe, edited, read by both sides, logged, rated, summarised, refused, and
+    # deleted after the export below has read it (a second recipe is deleted here).
+    canary_food = recipes.Ingredient(1, "CANARY-FOOD recipe", 87.3, 571.9, 20.0, 100.0, 10.0, 2.5)
+    recipe = recipes.save_recipe(
+        conn, "CANARY-COACH", None, name="CANARY-RECIPE bowl", steps="CANARY-STEPS cook 87.3 g",
+        ingredients=[canary_food],
+    )  # fmt: skip
+    recipes.save_recipe(
+        conn, "CANARY-COACH", recipe, name="CANARY-RECIPE bowl edited",
+        steps="CANARY-STEPS edited", ingredients=[canary_food],
+    )  # fmt: skip
+    recipes.list_recipes(conn, "CANARY-COACH")
+    recipes.list_recipes(conn, "CANARY-GYM")
+    records.add_recipe_items(
+        conn, "CANARY-GYM", recipe, consumed_on=date(2026, 10, 27), meal="dinner", factor=1.5
+    )
+    ratings.rate_recipe(conn, "CANARY-GYM", recipe, 4)
+    ratings.own_rating(conn, "CANARY-GYM", recipe)
+    ratings.can_rate(conn, "CANARY-GYM", recipe)
+    ratings.rating_summaries(conn, "CANARY-COACH")
+    gone = recipes.save_recipe(
+        conn, "CANARY-COACH", None, name="CANARY-RECIPE gone", steps="CANARY-STEPS gone",
+        ingredients=[canary_food],
+    )  # fmt: skip
+    recipes.delete_recipe(conn, "CANARY-COACH", gone)
+    for refused_write in (
+        lambda: recipes.save_recipe(
+            conn, "other-gym", recipe, name="CANARY-RECIPE refused", steps="CANARY-STEPS",
+            ingredients=[canary_food],
+        ),
+        lambda: recipes.save_recipe(
+            conn, "CANARY-COACH", None, name="CANARY-RECIPE too many", steps="CANARY-STEPS",
+            ingredients=[canary_food] * 2,
+        ),
+        lambda: ratings.rate_recipe(conn, "other-gym", recipe, 5),
+        lambda: ratings.rate_recipe(conn, "CANARY-GYM", recipe, 87),
+        lambda: records.add_recipe_items(
+            conn, "other-gym", recipe, consumed_on=date(2026, 10, 27), meal="lunch", factor=1.0
         ),
     ):  # fmt: skip
         try:
@@ -1112,12 +1170,15 @@ def test_no_record_or_error_holds_a_stored_value(store_conn, caplog):
     # Each kind of refusal happened, so their messages were checked.
     # T9.7: a gymer's preference is refused; T9.17: two targets; T9.25: three refused thread writes;
     # T9.30: one refused read of a client's question notifications.
-    # T9.34: two refused lists; T11.3: four refused thread calls; T11.5: four refused consent and
+    # T9.34: two refused lists; T11.3: four refused thread calls; T11.17: one code with no
+    # profile; T11.8: five refused recipe calls (another user's edit, a food twice, a
+    # stranger's rating, bad stars, a stranger's log); T11.5: four refused consent and
     # draft calls.
-    assert len(errors) == 3 + 6 + 9 + 1 + 2 + 3 + 1 + 2 + 4 + 4
+    assert len(errors) == 3 + 6 + 9 + 1 + 2 + 3 + 1 + 2 + 4 + 1 + 5 + 4
     texts = [stream.getvalue(), caplog.text, *(str(e) for e in errors), *(repr(e) for e in errors)]
-    # The two refused codes were logged, by reason only (T9.12).
-    assert stream.getvalue().count('"event": "invite_refused"') == 2
+    # The three refused codes were logged, by reason only (T9.12, T11.17).
+    assert stream.getvalue().count('"event": "invite_refused"') == 3
+    assert stream.getvalue().count('"reason": "no_profile"') == 1
     for canary in (*STORE_CANARY_TEXTS, "CANA-RYCA-NARY", "CANARYCANARY", *codes):
         for text in texts:
             assert canary not in text, canary

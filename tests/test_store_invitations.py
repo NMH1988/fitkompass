@@ -1,13 +1,14 @@
-"""Invitations, accepting a code and the daily limit on tries (T9.12, D15, AC-20, AC-22)."""
+"""Invitations, accepting a code and the daily limit on tries (T9.12, D15, AC-20, AC-22, T11.17)."""
 
 import hashlib
 import sqlite3
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
-from src import config
-from src.store import db, invitations, records, users
+from src import config, demo
+from src.store import db, invitations, notifications, records, users
 from src.store.access import NotFound
 from src.store.values import StoreValueError
 from tests import store_world as world
@@ -25,12 +26,27 @@ def clock(monkeypatch):
     return moment
 
 
+def _save_profile(conn, gymer):
+    """Save one profile entry for the gymer, as their first Save on My profile does (18+)."""
+    return records.add_profile_entry(
+        conn, gymer, height_cm=180.0, age=30, sex="female", activity="moderate", goal="maintain"
+    )
+
+
 @pytest.fixture
 def relationships(store_conn, clock):
-    """Build the made-up world, add a gymer with no coach, and return the relationship IDs."""
+    """Build the world, add a gymer with a profile and no coach; return the relationships."""
     found = world.build(store_conn)
     users.create_user(store_conn, NEWCOMER, "gymer", "Newcomer")
+    _save_profile(store_conn, NEWCOMER)
     return found
+
+
+@pytest.fixture
+def no_profile(store_conn, relationships):
+    """Add a gymer with no coach and no saved profile; return their ID."""
+    users.create_user(store_conn, "gym-noprofile", "gymer", "No profile")
+    return "gym-noprofile"
 
 
 def _relationships(conn, gymer):
@@ -196,6 +212,7 @@ def _used(conn, clock):
     """Return a code another gymer has accepted."""
     new = invitations.create_invitation(conn, world.COACH_A)
     users.create_user(conn, "gym-first", "gymer", "First")
+    _save_profile(conn, "gym-first")
     invitations.accept_invitation(conn, "gym-first", new.code, [])
     return new.code
 
@@ -362,3 +379,127 @@ def test_a_failed_accept_rolls_back_but_keeps_the_count(store_conn, relationship
     assert _relationships(store_conn, NEWCOMER) == []
     assert len(invitations.list_invitations(store_conn, world.COACH_A)) == 1
     assert _attempts(store_conn, NEWCOMER) == {"2026-11-03": 1}
+
+
+# --- A saved profile first (T11.17) -------------------------------------------------------------
+
+
+def _audit_count(conn):
+    """Return the number of audit rows."""
+    return conn.execute("SELECT count(*) FROM audit_log").fetchone()[0]
+
+
+def test_a_gymer_with_no_profile_is_refused_before_the_code_is_checked(store_conn, no_profile):
+    """A valid code is refused with "no_profile": no relationship, no try, the code unused."""
+    new = invitations.create_invitation(store_conn, world.COACH_A)
+    with pytest.raises(invitations.InvitationRefused) as refused:
+        invitations.accept_invitation(store_conn, no_profile, new.code, ["nutrition", "body"])
+    assert refused.value.reason == "no_profile"
+    assert str(refused.value) == "no_profile"
+    assert _relationships(store_conn, no_profile) == []
+    assert _attempts(store_conn, no_profile) == {}
+    assert store_conn.execute("SELECT used_at FROM invitations").fetchone()[0] is None
+
+
+@pytest.mark.parametrize("typed", ["ABCD-EFGH-JKLM", "not a code", 123])
+def test_no_profile_comes_before_any_code_and_is_never_counted(store_conn, no_profile, typed):
+    """A wrong or malformed code gets "no_profile" too, so the code is not even looked at."""
+    for _ in range(config.INVITE_MAX_ATTEMPTS + 1):
+        with pytest.raises(invitations.InvitationRefused) as refused:
+            invitations.accept_invitation(store_conn, no_profile, typed, [])
+        assert refused.value.reason == "no_profile"
+    assert _attempts(store_conn, no_profile) == {}
+
+
+def test_nothing_changes_for_the_coach_when_a_gymer_has_no_profile(store_conn, no_profile):
+    """The code stays listed and unused; no audit row and no notification for either side."""
+    new = invitations.create_invitation(store_conn, world.COACH_A)
+    audit_before = _audit_count(store_conn)
+    coach_before = notifications.list_notifications(store_conn, world.COACH_A)
+    with pytest.raises(invitations.InvitationRefused):
+        invitations.accept_invitation(store_conn, no_profile, new.code, ["body"])
+    [listed] = invitations.list_invitations(store_conn, world.COACH_A)
+    assert listed["id"] == new.id and listed["expired"] is False
+    assert _audit_count(store_conn) == audit_before
+    assert notifications.list_notifications(store_conn, world.COACH_A) == coach_before
+    assert notifications.list_notifications(store_conn, no_profile) == []
+
+
+def test_after_saving_a_profile_the_same_code_works(store_conn, no_profile):
+    """The refused code is still valid: once the profile is saved it connects the gymer."""
+    new = invitations.create_invitation(store_conn, world.COACH_A)
+    with pytest.raises(invitations.InvitationRefused):
+        invitations.accept_invitation(store_conn, no_profile, new.code, ["body"])
+    _save_profile(store_conn, no_profile)
+    invitations.accept_invitation(store_conn, no_profile, new.code, ["body"])
+    assert _relationships(store_conn, no_profile) == [(world.COACH_A, "active")]
+    assert _attempts(store_conn, no_profile) == {"2026-11-03": 1}
+
+
+def test_a_gymer_who_deleted_every_profile_entry_is_refused_again(store_conn, no_profile):
+    """Only a profile that is still saved counts; a deleted one leaves no declared age."""
+    entry = _save_profile(store_conn, no_profile)
+    records.delete_record(store_conn, no_profile, "profile_entries", entry)
+    new = invitations.create_invitation(store_conn, world.COACH_A)
+    with pytest.raises(invitations.InvitationRefused) as refused:
+        invitations.accept_invitation(store_conn, no_profile, new.code, [])
+    assert refused.value.reason == "no_profile"
+
+
+def test_a_profile_deleted_after_the_count_is_refused_in_the_redeem_transaction(
+    store_conn, no_profile, monkeypatch
+):
+    """A profile deleted in another tab between the two steps: refused, nothing started."""
+    entry = _save_profile(store_conn, no_profile)
+    new = invitations.create_invitation(store_conn, world.COACH_A)
+    real_count = invitations._count_attempt
+
+    def count_then_delete(conn, gymer_id):
+        """Count the try, then delete the profile as another tab would."""
+        real_count(conn, gymer_id)
+        records.delete_record(conn, gymer_id, "profile_entries", entry)
+
+    monkeypatch.setattr(invitations, "_count_attempt", count_then_delete)
+    with pytest.raises(invitations.InvitationRefused) as refused:
+        invitations.accept_invitation(store_conn, no_profile, new.code, ["body"])
+    assert refused.value.reason == "no_profile"
+    assert _relationships(store_conn, no_profile) == []
+    assert store_conn.execute("SELECT used_at FROM invitations").fetchone()[0] is None
+    assert _attempts(store_conn, no_profile) == {"2026-11-03": 1}  # the rare case keeps its try
+
+
+def test_a_relationship_stays_when_the_gymer_deletes_their_profile(store_conn, relationships):
+    """Relationships made before stay: deleting every profile entry ends nothing."""
+    for entry in records.list_profile_entries(store_conn, world.SHARED, world.SHARED):
+        records.delete_record(store_conn, world.SHARED, "profile_entries", entry["id"])
+    assert _relationships(store_conn, world.SHARED) == [(world.COACH_A, "active")]
+    assert records.list_body_measurements(store_conn, world.COACH_A, world.SHARED)
+
+
+def test_the_demo_s_low_level_step_needs_no_profile(store_conn, no_profile):
+    """users.start_relationship (the demo seed's step, no code) is unchanged by T11.17."""
+    users.start_relationship(store_conn, world.COACH_B, no_profile)
+    assert _relationships(store_conn, no_profile) == [(world.COACH_B, "active")]
+
+
+def test_demo_mode_is_unaffected(store_conn):
+    """The demo seed still runs, and its gymer with no coach (Kim) still redeems a code."""
+    demo.seed(store_conn)
+    code = invitations.create_invitation(store_conn, demo.COACH.id).code
+    invitations.accept_invitation(store_conn, demo.OTHER_GYMER.id, code, ["body"])
+    assert _relationships(store_conn, demo.OTHER_GYMER.id) == [(demo.COACH.id, "active")]
+    assert _relationships(store_conn, demo.SHARING_GYMER.id) == [(demo.COACH.id, "active")]
+
+
+def test_only_the_demo_seed_starts_a_relationship_without_a_code():
+    """users.start_relationship skips the profile check, so only src/demo.py may call it."""
+    root = Path(__file__).resolve().parents[1]
+    files = [root / "app.py", root / "serve.py"]
+    for folder in ("src", "views", "scripts"):
+        files += (root / folder).rglob("*.py")
+    callers = {
+        path.relative_to(root).as_posix()
+        for path in files
+        if path.exists() and "start_relationship(" in path.read_text(encoding="utf-8")
+    }
+    assert callers == {"src/demo.py", "src/store/users.py"}

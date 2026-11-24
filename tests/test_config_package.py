@@ -129,6 +129,14 @@ NEW_NAMES = frozenset(
         "CHAT_TOKEN_SECRET_PLACEHOLDER",
         "chat_token_secret",
         "MAX_MEAL_PLAN_FOODS",  # T11.7
+        # T11.8: the coach's recipe library and the clients' ratings.
+        "RECIPE_NAME_MAX_CHARS",
+        "RECIPE_STEPS_MAX_CHARS",
+        "MAX_RECIPE_INGREDIENTS",
+        "MAX_RECIPES_PER_COACH",
+        "RECIPE_PORTION_RANGE",
+        "RECIPE_PORTION_STEP",
+        "RATING_MIN_RATERS",
         # T11.5: drafting log entries from a gymer's own messages.
         "DRAFT_MODEL",
         "DRAFT_MAX_TOKENS",

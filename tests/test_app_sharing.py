@@ -1,7 +1,8 @@
 """UI tests for the coach's Clients page and the gymer's Coach and sharing page (T9.12).
 
 AC-20 (a relationship only from a valid code), AC-22 (a revoked scope or an ended relationship
-blocks the coach's next read), D15 (a code shown once, stored as a hash, cancellable).
+blocks the coach's next read), D15 (a code shown once, stored as a hash, cancellable), T11.17 (a
+saved profile before a code).
 """
 
 import hashlib
@@ -242,6 +243,7 @@ def _used(code: str) -> None:
     """Have another gymer accept the code first."""
     _gymer("gym-first", "First")
     with db.connect() as conn:
+        account.save_profile(conn, "gym-first", PROFILE, with_weight=True)
         invitations.accept_invitation(conn, "gym-first", code, [])
 
 
@@ -534,3 +536,84 @@ def test_the_scopes_say_what_the_coach_s_assistant_sends(
     captions = [str(item.value) for item in at.caption]
     assert [text for text in captions if phrase in text]
     assert "OpenRouter" in i18n.t("sharing.assistant", language)
+
+
+# --- A saved profile before a code (T11.17) -----------------------------------------------------
+
+PROFILE_FIRST_EN = (
+    "This app is for adults, so a coach can connect with you only after you have saved your "
+    "details, with your age, on My profile. Saving them first does not use up a code from "
+    "your coach: it works until it expires or your coach cancels it."
+)
+
+
+@pytest.fixture
+def gymer_without_profile():
+    """Store the canary user as a gymer with no saved profile, and another coach."""
+    store_account("gymer")
+    _coach()
+
+
+def _link_hash(at: AppTest, label: str) -> str:
+    """Return the page hash of the one page link with this label (where a click goes)."""
+    (link,) = [item for item in at.get("page_link") if item.proto.label == label]
+    return link.proto.page_script_hash
+
+
+def test_a_gymer_with_no_profile_is_told_to_save_it_first(monkeypatch, gymer_without_profile):
+    """No code form: a note that the app is for adults, and a link to My profile."""
+    at = open_page(start(monkeypatch, user=signed_in()), navigation.SHARING)
+    assert PROFILE_FIRST_EN in page_text(at)
+    assert _link_hash(at, "Go to My profile") == calc_hash(navigation.PROFILE)
+    assert not at.text_input  # no code box
+    assert not [item for item in at.button if item.label == "Accept the invitation"]
+    assert "You have no coach" not in page_text(at)
+    assert "The app does not check a coach's qualifications." in page_text(at)
+
+
+def test_the_profile_note_in_german(monkeypatch, gymer_without_profile):
+    """The note and its link speak German."""
+    at = open_page(start(monkeypatch, user=signed_in(), language="de"), navigation.SHARING)
+    assert i18n.t("sharing.profile_first", "de") in page_text(at)
+    assert "Diese App ist für Erwachsene" in page_text(at)
+    assert _link_hash(at, "Zu Mein Profil") == calc_hash(navigation.PROFILE)
+
+
+def test_after_saving_a_profile_the_code_form_shows(monkeypatch, gymer_without_profile):
+    """Once a profile is saved, the next visit asks for the code as before."""
+    with db.connect() as conn:
+        account.save_profile(conn, USER_ID, PROFILE, with_weight=True)
+    at = open_page(start(monkeypatch, user=signed_in()), navigation.SHARING)
+    assert "You have no coach" in page_text(at)
+    assert PROFILE_FIRST_EN not in page_text(at)
+
+
+def test_a_profile_deleted_in_another_tab_gets_the_no_profile_message(monkeypatch, gymer_and_coach):
+    """The form was drawn, then the profile went: the store refuses and the page says why."""
+    code = _code_for()
+    at = open_page(start(monkeypatch, user=signed_in()), navigation.SHARING)
+    real = invitations.accept_invitation
+
+    def other_tab_first(conn, gymer_id, typed, scopes):
+        """Delete every profile entry as a second tab would, then accept this page's code."""
+        for entry in records.list_profile_entries(conn, gymer_id, gymer_id):
+            records.delete_record(conn, gymer_id, "profile_entries", entry["id"])
+        return real(conn, gymer_id, typed, scopes)
+
+    # A later run reads the store before drawing, so only a change inside the run reaches it.
+    monkeypatch.setattr(invitations, "accept_invitation", other_tab_first)
+    _accept(at, code, ["body"])
+    assert [item.value for item in at.error] == [
+        "Save your details on My profile first, then enter the code again."
+    ]
+    assert _statuses() == []
+    assert [row["used_at"] for row in _invitation_rows()] == [None]
+
+
+def test_a_connected_gymer_with_no_profile_keeps_the_coach(monkeypatch, gymer_without_profile):
+    """A relationship made before (here with no profile) stays: the coach and scopes show."""
+    _relationship(OTHER_COACH, USER_ID, ("body",))
+    at = open_page(start(monkeypatch, user=signed_in()), navigation.SHARING)
+    assert "**Your coach:** Coach Kai" in page_text(at)
+    assert PROFILE_FIRST_EN not in page_text(at)
+    assert _scope_box(at, "body").value is True
