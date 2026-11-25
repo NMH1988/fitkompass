@@ -2,7 +2,8 @@
 
 Consent (a) is given or withdrawn here in one click, with its text (`src/drafting.py`); a consent
 to an older text counts as none and asks again. Only with it, and only when the gymer presses the
-button, does `src/agent/drafts.py` read the gymer's own new messages and pause on a message's
+button, does `src/agent/drafts.py` read the gymer's own undrafted messages of the diary's window
+and pause on a message's
 cards: each card says it was drafted by an AI model, and the gymer approves, edits or rejects every
 card of the message, then saves them in one step. Withdrawing the consent drops the pending drafts
 at once. The run lives in this session only (`Drafter`), keyed by the acting user.

@@ -439,19 +439,36 @@ def test_the_consent_can_be_withdrawn_with_no_conversation(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    ("language", "others", "coach"),
+    ("language", "phrases"),
     [
-        ("en", "other people's names included", "including those you sent before giving"),
-        ("de", "auch Namen anderer Personen", "auch der vor dieser Einwilligung gesendeten"),
+        (
+            "en",
+            (
+                "other people's names included",
+                "your conversation with your current coach",
+                "including those you sent before giving",
+                "today and up to 30 days back",
+            ),
+        ),
+        (
+            "de",
+            (
+                "auch Namen anderer Personen",
+                "im Gespräch mit Ihrem aktuellen Coach",
+                "auch der vor dieser Einwilligung gesendeten",
+                "von heute und bis zu 30 Tagen zurück",
+            ),
+        ),
     ],
 )
-def test_the_consent_text_says_other_names_go_too_and_names_the_current_coach(
-    monkeypatch, gymer_thread, fake_model, language, others, coach
+def test_the_consent_text_names_what_it_covers(
+    monkeypatch, gymer_thread, fake_model, language, phrases
 ):
-    """Consent (a) tells the gymer that other people's names in a message are sent too."""
+    """Consent (a) names other people's names, the current coach, earlier messages, the window."""
     at = _run(monkeypatch, language=language)
     page = texts(at)
-    assert others in page and coach in page
+    for phrase in phrases:
+        assert phrase in page, phrase
 
 
 def test_a_food_already_logged_that_day_is_flagged_on_its_card(

@@ -243,7 +243,7 @@ def test_the_intro_names_the_recipes_and_ratings(monkeypatch, role, language, st
 @pytest.mark.parametrize(
     ("language", "stored"),
     [
-        ("en", "your consents to send your messages to an AI model"),
+        ("en", "which of your messages the AI drafting has already handled"),
         ("de", "Ihre Einwilligungen, Ihre Nachrichten an ein KI-Modell zu senden"),
     ],
 )
