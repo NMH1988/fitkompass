@@ -89,10 +89,11 @@ def test_a_step_logs_its_entries_and_marks_the_message_once(conn):
     assert drafts.save_step(conn, world.SHARED, message, **entries)
     assert _logged(conn) == tuple(count + 1 for count in before)
     row = conn.execute(
-        "SELECT from_suggestion, grams, kcal FROM meal_items WHERE user_id = ? ORDER BY id DESC",
+        "SELECT from_suggestion, from_recipe, grams, kcal FROM meal_items"
+        " WHERE user_id = ? ORDER BY id DESC",
         (world.SHARED,),
     ).fetchone()
-    assert tuple(row) == (0, 80.0, 303.2)
+    assert tuple(row) == (0, None, 80.0, 303.2)  # neither from a suggestion nor from a recipe
     assert not drafts.save_step(conn, world.SHARED, message, **entries)  # another tab, say
     assert _logged(conn) == tuple(count + 1 for count in before)
     assert not drafts.mark_finished(conn, world.SHARED, message)

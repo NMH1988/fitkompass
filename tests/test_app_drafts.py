@@ -467,3 +467,4 @@ def test_a_food_already_logged_that_day_is_flagged_on_its_card(
     _press(at)
     notes = "\n".join(str(item.value) for item in at.warning)
     assert "Already logged on" in notes and "50 g (Breakfast)" in notes
+    assert _logged("meal_items") == 1  # the note merges or changes nothing

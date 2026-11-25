@@ -769,7 +769,7 @@ def test_a_migration_8_that_fails_halfway_leaves_the_version_7_file_as_it_was(tm
 
 
 def test_upgrading_a_version_8_file_adds_the_meal_plan_tables_and_keeps_the_rows(tmp_path):
-    """A version 8 file gets migrations 9 and 10: empty plan tables, every audit row kept."""
+    """A version 8 file gets migrations 9 to 11: empty plan tables, every audit row kept."""
     path = tmp_path / "old.sqlite3"
     audit_rows = _old_file(path, 8)
     with db.connect(path) as conn:
@@ -820,7 +820,7 @@ def test_a_plan_needs_two_users_and_a_food_appears_once_per_meal(store_conn):
 
 
 def test_upgrading_a_version_9_file_adds_the_recipe_tables_and_an_empty_mark(tmp_path):
-    """A version 9 file gets migration 10: empty recipe tables, its meal items kept, unmarked."""
+    """A version 9 file gets migrations 10 and 11: empty recipe tables, its meal items unmarked."""
     path = tmp_path / "old.sqlite3"
     audit_rows = _old_file(path, 9)
     raw = sqlite3.connect(path, autocommit=True)
@@ -975,7 +975,7 @@ def test_upgrading_a_version_10_file_adds_the_consent_and_drafted_tables_and_kee
 
 
 def test_a_migration_11_that_fails_halfway_leaves_the_version_10_file_as_it_was(tmp_path):
-    """A failure after migration 11 made its first table undoes it: version 10, no new table."""
+    """A failure after migration 11 made both tables undoes it: version 10, no new table."""
     path = tmp_path / "old.sqlite3"
     _old_file(path, 10)
     raw = sqlite3.connect(path, autocommit=True)
