@@ -132,7 +132,9 @@ def build_model(*, api_key: str | None = None, http_client: Any = None):
 
 def consent_text(lang: i18n.Language) -> str:
     """Return consent (a)'s text in a language, naming OpenRouter and the model's provider."""
-    return i18n.t(CONSENT_TEXT_KEY, lang, provider=model_provider())
+    return i18n.t(
+        CONSENT_TEXT_KEY, lang, provider=model_provider(), days=config.DIARY_MAX_DAYS_BACK
+    )
 
 
 def model_provider() -> str:

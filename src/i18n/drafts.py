@@ -8,8 +8,10 @@ EN: dict[str, str] = {
     # (src/drafting.py), so changing it asks every gymer again before the next draft.
     "drafts.consent_text": (
         "Consent (Art. 9 GDPR) to drafts of log entries from your messages. When you press "
-        '"Draft entries from my messages", the text of your own new messages in your '
-        "conversation with your current coach (never your coach's messages) is sent, one message "
+        '"Draft entries from my messages", the text of your own messages of the last '
+        "{days} days in your conversation with your current coach that were not drafted yet, "
+        "including those you sent before giving this consent (never your coach's messages), "
+        "is sent, one message "
         "at a time, to an AI model through OpenRouter and on to the model's provider, {provider}, "
         "which drafts food, weight and workout entries for you to check. Everything in a message "
         "goes with it, other people's names included, so write only about your own food, weight "
@@ -113,8 +115,9 @@ DE: dict[str, str] = {
     "drafts.consent_text": (
         "Einwilligung (Art. 9 DSGVO) in Entwürfe von Tagebucheinträgen aus Ihren Nachrichten. "
         "Wenn Sie auf „Einträge aus meinen Nachrichten entwerfen“ klicken, wird der Text Ihrer "
-        "eigenen neuen Nachrichten im Gespräch mit Ihrem aktuellen Coach (nie die Nachrichten "
-        "Ihres Coachs) einzeln über OpenRouter an ein KI-Modell und weiter an dessen Anbieter, "
+        "eigenen, noch nicht entworfenen Nachrichten der letzten {days} Tage im Gespräch mit Ihrem "
+        "aktuellen Coach, auch der vor dieser Einwilligung gesendeten (nie die Nachrichten Ihres "
+        "Coachs), einzeln über OpenRouter an ein KI-Modell und weiter an dessen Anbieter, "
         "{provider}, gesendet, der Einträge zu Essen, Gewicht und Training entwirft, die Sie "
         "prüfen. Alles in einer Nachricht wird mitgesendet, auch Namen anderer Personen; schreiben "
         "Sie daher nur über Ihr eigenes Essen, Ihr Gewicht und Ihr Training. Ihre Nachrichten "

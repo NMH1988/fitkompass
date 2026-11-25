@@ -241,6 +241,20 @@ def test_the_intro_names_the_recipes_and_ratings(monkeypatch, role, language, st
 
 
 @pytest.mark.parametrize(
+    ("language", "stored"),
+    [
+        ("en", "your consents to send your messages to an AI model"),
+        ("de", "Ihre Einwilligungen, Ihre Nachrichten an ein KI-Modell zu senden"),
+    ],
+)
+def test_the_gymer_intro_names_the_ai_consents_and_drafted_messages(monkeypatch, language, stored):
+    """A gymer is told their AI consents and drafted messages are stored and exported (T11.5)."""
+    store_account("gymer", name="Alex", profile=PROFILE)
+    at = open_my_data(start(monkeypatch, user=signed_in(), language=language))
+    assert stored in texts(at)
+
+
+@pytest.mark.parametrize(
     ("language", "ratings_go"),
     [
         ("en", "a coach's recipes go with every client's rating of them, while the meals"),

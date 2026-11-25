@@ -441,8 +441,8 @@ def test_the_consent_can_be_withdrawn_with_no_conversation(monkeypatch):
 @pytest.mark.parametrize(
     ("language", "others", "coach"),
     [
-        ("en", "other people's names included", "your conversation with your current coach"),
-        ("de", "auch Namen anderer Personen", "im Gespräch mit Ihrem aktuellen Coach"),
+        ("en", "other people's names included", "including those you sent before giving"),
+        ("de", "auch Namen anderer Personen", "auch der vor dieser Einwilligung gesendeten"),
     ],
 )
 def test_the_consent_text_says_other_names_go_too_and_names_the_current_coach(
@@ -468,3 +468,16 @@ def test_a_food_already_logged_that_day_is_flagged_on_its_card(
     notes = "\n".join(str(item.value) for item in at.warning)
     assert "Already logged on" in notes and "50 g (Breakfast)" in notes
     assert _logged("meal_items") == 1  # the note merges or changes nothing
+
+
+def test_a_consent_to_an_older_text_can_be_withdrawn_on_the_thread(monkeypatch, gymer_thread):
+    """With the text changed, the thread offers Withdraw beside Give, and it closes the row."""
+    with db.connect() as conn:
+        ai_consents.give(conn, USER_ID, drafting.PURPOSE, "0123456789ab")  # an older text
+    at = _run(monkeypatch)
+    assert "Give this consent" in _labels(at) and "Withdraw this consent" in _labels(at)
+    _button(at, "Withdraw this consent").click()
+    at.run(timeout=30)
+    with db.connect() as conn:
+        assert ai_consents.current(conn, USER_ID, drafting.PURPOSE) is None
+    assert "Withdraw this consent" not in _labels(at)

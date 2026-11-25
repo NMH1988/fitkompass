@@ -66,8 +66,12 @@ def _consent(user_id: str) -> bool:
         return True
     if current is not None:
         st.warning(t("drafts.consent_changed"), icon=":material/update:")
-    if st.button(t("drafts.consent_give"), key="drafts_give", type="primary"):
+    give, withdraw = st.columns(2)
+    if give.button(t("drafts.consent_give"), key="drafts_give", type="primary"):
         _set_consent(user_id, give=True)
+    # A consent to an older text still open is withdrawn here too, not only renewed.
+    if current is not None and withdraw.button(t("drafts.consent_withdraw"), key="drafts_withdraw"):
+        _set_consent(user_id, give=False)
     return False
 
 
