@@ -137,6 +137,17 @@ NEW_NAMES = frozenset(
         "RECIPE_PORTION_RANGE",
         "RECIPE_PORTION_STEP",
         "RATING_MIN_RATERS",
+        # T11.5: drafting log entries from a gymer's own messages.
+        "DRAFT_MODEL",
+        "DRAFT_MAX_TOKENS",
+        "DRAFT_PROVIDERS",
+        "DRAFT_PROMPT_PATH",
+        "DRAFT_PROMPT_MISSING_MESSAGE",
+        "DRAFT_MAX_MESSAGES_PER_RUN",
+        "DRAFT_MAX_FOODS",
+        "DRAFT_MAX_SET_GROUPS",
+        "DRAFT_MAX_SETS_PER_GROUP",
+        "DRAFT_MAX_STEPS",
     }
 )
 

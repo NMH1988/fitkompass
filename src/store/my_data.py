@@ -8,14 +8,18 @@ approved ones among them (T9.25), the audit rows by or about them, the user's ow
 read mark (T9.29; never the other side's), the foods coaches suggested to them (T9.34), every
 message of the threads they are a side of, both sides' messages, ended relationships' too (T11.3),
 the meal plans coaches wrote for them (T11.7), a coach's own recipes with every version and food,
-and a gymer's own ratings of recipes (T11.8; never the other side's).
+and a gymer's own ratings of recipes (T11.8; never the other side's), and the user's Art. 9
+consents with their history and which of their messages the drafting workflow has finished with
+(T11.5).
 The delete removes the user's rows in every table, their relationships and scopes, the reviews about
 them and those they wrote as a coach (with their evidence, questions and answers), every question or
 answer the user wrote, the lists of suggested foods between the user and a coach or client (T9.34)
 and the meal plans between them (T11.7), a coach's recipes with their versions, foods and every
 client's rating of them, and the ratings the user gave (T11.8; the meal items gymers logged from a
 deleted recipe stay theirs), the messages of every thread the user is a side of (T11.3),
-so a thread goes when either side deletes their data, the invitations and code attempts, the read
+so a thread goes when either side deletes their data, with its messages' drafted marks, the
+Art. 9 consents of the user and those given to one coach that name the user's relationships
+(T11.5), the invitations and code attempts, the read
 mark, and the audit rows by or about them: the app is local and keeps no audit duty (the owner may
 change this). It runs in one transaction with foreign keys on, and no reference cascades, so a table
 this list forgets makes the delete fail instead of leaving rows behind. The review workflow's
@@ -192,6 +196,14 @@ SELECT message.* FROM messages AS message
 JOIN coach_clients AS relationship ON relationship.id = message.relationship_id
 WHERE relationship.coach_id = ? OR relationship.client_id = ? ORDER BY message.id
 """
+# The gymer's own Art. 9 consents, every row: the open ones and their history (T11.5).
+_AI_CONSENTS = "SELECT * FROM ai_consents WHERE user_id = ? ORDER BY id"
+# Which of the user's own messages the drafting workflow has finished with (T11.5).
+_MESSAGE_DRAFTS = """
+SELECT drafted.* FROM message_drafts AS drafted
+JOIN messages AS message ON message.id = drafted.message_id
+WHERE message.sender_id = ? ORDER BY drafted.message_id
+"""
 
 # The delete, children before parents. The threads under the reviews about or by the user go with
 # them, and every question or answer the user wrote (T9.25).
@@ -251,6 +263,22 @@ _DELETE_AUDIT = "DELETE FROM audit_log WHERE actor_id = ? OR subject_id = ?"
 _DELETE_MESSAGES = """
 DELETE FROM messages
 WHERE sender_id = ?
+    OR relationship_id IN (SELECT id FROM coach_clients WHERE coach_id = ? OR client_id = ?)
+"""
+# The drafted marks of the messages deleted below (T11.5): the same messages, so the marks go first.
+_DELETE_MESSAGE_DRAFTS = """
+DELETE FROM message_drafts
+WHERE message_id IN (
+    SELECT id FROM messages
+    WHERE sender_id = ?
+        OR relationship_id IN (SELECT id FROM coach_clients WHERE coach_id = ? OR client_id = ?)
+)
+"""
+# The user's Art. 9 consents, and the ones given to the user as a coach, which name a relationship
+# deleted below (T11.5): a consent to one coach goes with that relationship.
+_DELETE_AI_CONSENTS = """
+DELETE FROM ai_consents
+WHERE user_id = ?
     OR relationship_id IN (SELECT id FROM coach_clients WHERE coach_id = ? OR client_id = ?)
 """
 _DELETE_CONSENTS = """
@@ -335,6 +363,8 @@ def export_user_data(conn: sqlite3.Connection, user_id: str) -> str:
             "recipe_versions": [dict(r) for r in conn.execute(_RECIPE_VERSIONS, one)],
             "recipe_ingredients": [dict(r) for r in conn.execute(_RECIPE_INGREDIENTS, one)],
             "recipe_ratings": [dict(r) for r in conn.execute(_RATINGS, one)],
+            "ai_consents": [dict(r) for r in conn.execute(_AI_CONSENTS, one)],
+            "message_drafts": [dict(r) for r in conn.execute(_MESSAGE_DRAFTS, one)],
         }
     return json.dumps(document, ensure_ascii=False, indent=2)
 
@@ -371,7 +401,9 @@ def delete_user_data(
         conn.execute(_DELETE_RECIPE_VERSIONS, one)
         conn.execute(_DELETE_RECIPES, one)
         conn.execute(_DELETE_AUDIT, both)
+        conn.execute(_DELETE_MESSAGE_DRAFTS, (user_id, user_id, user_id))
         conn.execute(_DELETE_MESSAGES, (user_id, user_id, user_id))
+        conn.execute(_DELETE_AI_CONSENTS, (user_id, user_id, user_id))
         conn.execute(_DELETE_CONSENTS, both)
         conn.execute(_DELETE_RELATIONSHIPS, both)
         conn.execute(_DELETE_INVITATIONS, one)

@@ -640,5 +640,59 @@ CREATE INDEX meal_items_from_recipe ON meal_items (user_id, from_recipe);
 PRAGMA user_version = 10;
 """
 
+# T11.5 (migration 11, D25): the gymer's Art. 9 consents to send data to a model, one purpose each
+# (PRD "Consents (Art. 9)"), apart from the sharing scopes in `consents`, and the mark of a message
+# the drafting workflow has finished with.
+#
+# ai_consents: a row is one consent given, with the version of the text agreed to; it changes once,
+# when it is withdrawn (`withdrawn_at` set, as `consents.revoked_at` is), and a trigger refuses any
+# other change; giving it again is a new row, so the rows are the consent's history. One open row
+# per user and purpose, and per relationship for the purposes given to one coach (b and e); those
+# rows name their relationship and go with it, as its ids can be reused once it is deleted (no
+# AUTOINCREMENT) and a kept row could then match a later relationship. The purposes are
+# 'message_drafts' (a), 'coach_thread' (b), 'media' (c), 'dish_suggestions' (d), 'client_notes' (e).
+#
+# message_drafts: one row per message the workflow has finished with (its cards decided, no card
+# found, or refused by the guard), so it never reaches a model again; it refers to the message and
+# goes with it, and no logged entry refers to a message, so neither side's delete is blocked.
+_V11 = """
+CREATE TABLE ai_consents (
+    id INTEGER PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users (id),
+    purpose TEXT NOT NULL
+        CHECK (purpose IN ('message_drafts', 'coach_thread', 'media', 'dish_suggestions',
+            'client_notes')),
+    relationship_id INTEGER REFERENCES coach_clients (id),
+    text_version TEXT NOT NULL
+        CHECK (length(text_version) = 12 AND text_version NOT GLOB '*[^0-9a-f]*'),
+    given_at TEXT NOT NULL
+        CHECK (given_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T*+00:00'
+            AND date(given_at) IS substr(given_at, 1, 10)),
+    withdrawn_at TEXT CHECK (
+        withdrawn_at IS NULL
+        OR withdrawn_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T*+00:00'
+            AND date(withdrawn_at) IS substr(withdrawn_at, 1, 10)
+    ),
+    CHECK ((purpose IN ('coach_thread', 'client_notes')) = (relationship_id IS NOT NULL))
+) STRICT;
+CREATE UNIQUE INDEX ai_consents_one_open
+    ON ai_consents (user_id, purpose, ifnull(relationship_id, 0)) WHERE withdrawn_at IS NULL;
+CREATE INDEX ai_consents_relationship ON ai_consents (relationship_id);
+CREATE TRIGGER ai_consents_only_withdrawn BEFORE UPDATE ON ai_consents
+WHEN OLD.withdrawn_at IS NOT NULL OR NEW.withdrawn_at IS NULL OR NEW.id IS NOT OLD.id
+    OR NEW.user_id IS NOT OLD.user_id OR NEW.purpose IS NOT OLD.purpose
+    OR NEW.relationship_id IS NOT OLD.relationship_id OR NEW.text_version IS NOT OLD.text_version
+    OR NEW.given_at IS NOT OLD.given_at
+BEGIN SELECT RAISE(ABORT, 'a consent only changes when it is withdrawn'); END;
+
+CREATE TABLE message_drafts (
+    message_id INTEGER PRIMARY KEY REFERENCES messages (id)
+) STRICT;
+CREATE TRIGGER message_drafts_never_changed BEFORE UPDATE ON message_drafts
+BEGIN SELECT RAISE(ABORT, 'stored records are never changed in place'); END;
+
+PRAGMA user_version = 11;
+"""
+
 # In order: MIGRATIONS[0] creates version 1, MIGRATIONS[1] takes it to version 2, and so on.
-MIGRATIONS: tuple[str, ...] = (_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10)
+MIGRATIONS: tuple[str, ...] = (_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10, _V11)

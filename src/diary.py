@@ -114,6 +114,19 @@ def _meal_item(
     }
 
 
+def checked_meal_item(
+    food_name: object,
+    grams: object,
+    meal: object,
+    day: object,
+    today: date,
+    table: Sequence[Food] | None = None,
+) -> dict:
+    """Return a food entry's checked fields with its snapshot, as log_food() writes them."""
+    # For an entry written elsewhere with the same rules (a drafted card the gymer approved, T11.5).
+    return _meal_item(food_name, grams, meal, day, today, table)
+
+
 def log_food(
     conn: sqlite3.Connection,
     user_id: str,

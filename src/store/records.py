@@ -606,6 +606,17 @@ def _checked_sets(sets: Sequence[ExerciseSet]) -> list[tuple]:
     ]
 
 
+def _write_meal(conn: sqlite3.Connection, row: tuple) -> int:
+    """Write a checked meal item row inside the caller's transaction; return its ID."""
+    # A drafted entry (T11.5) is neither from a coach's suggestion nor from a recipe.
+    return conn.execute(_ADD_MEAL, (*row, 0, None)).lastrowid
+
+
+def _write_weight(conn: sqlite3.Connection, row: tuple) -> int:
+    """Write a checked weight row inside the caller's transaction; return its ID."""
+    return conn.execute(_ADD_WEIGHT, row).lastrowid
+
+
 def _write_session(conn: sqlite3.Connection, session: tuple[str, str], checked: list[tuple]) -> int:
     """Write a checked session and its sets inside the caller's transaction; return its ID."""
     session_id = conn.execute(_ADD_SESSION, (*session, values.utc_text())).lastrowid

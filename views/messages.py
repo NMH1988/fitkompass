@@ -9,6 +9,9 @@ component keeps the socket and, before the token expires, triggers a rerun of th
 (not the page, so nothing else runs on a timer). Its `key` is fixed per thread, so a new token
 updates the component instead of mounting a new one. Without the socket (`streamlit run app.py`),
 or on a page opened at an address the socket refuses, the thread is read-only and the page says so.
+Under a gymer's active thread, `views/drafts.py` offers consent (a) and AI drafts of log entries
+from the gymer's own messages (T11.5); with an ended thread or none, it shows the consent with its
+withdraw button only, while it is given.
 """
 
 from pathlib import Path
@@ -21,7 +24,7 @@ from src.realtime import page as realtime_page
 from src.realtime import server as realtime_server
 from src.store import messages, users
 from src.store.access import NotFound
-from views import account, header
+from views import account, drafts, header
 from views.text import lang, t
 
 URL_PATH = "messages"
@@ -174,6 +177,11 @@ def page() -> None:
             return
         if not threads:
             st.caption(t(f"messages.none_{user['role']}"))
+            if user["role"] == "gymer":
+                drafts.standing_consent(user["id"])  # withdrawable with no conversation too
             return
         thread = _pick(threads)
         _thread(user["id"], thread["id"])
+        if user["role"] == "gymer":
+            # Outside the thread's fragment: a renewal reruns the fragment alone, never a draft.
+            drafts.section(user["id"], thread)

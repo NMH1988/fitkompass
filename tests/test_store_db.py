@@ -47,6 +47,8 @@ TABLES = {
     "recipe_versions",
     "recipe_ingredients",
     "recipe_ratings",
+    "ai_consents",
+    "message_drafts",
 }
 # SQLite's own table behind recipes' AUTOINCREMENT (T11.8): the highest recipe ID, no user data.
 SQLITE_SEQUENCE = "sqlite_sequence"
@@ -200,6 +202,15 @@ VALID_ROWS = {
         "fiber_g": 0.6,
     },
     "recipe_ratings": {"recipe_id": 1, "client_id": "g1", "stars": 4, "created_at": NOW},
+    "ai_consents": {
+        "user_id": "g1",
+        "purpose": "message_drafts",
+        "relationship_id": None,
+        "text_version": "0123456789ab",
+        "given_at": NOW,
+        "withdrawn_at": None,
+    },
+    "message_drafts": {"message_id": 1},
 }
 NON_NEGATIVE = [
     ("profile_entries", "age"),
@@ -258,6 +269,7 @@ IMMUTABLE = [
     "recipe_versions",
     "recipe_ingredients",
     "recipe_ratings",
+    "message_drafts",
 ]
 
 
@@ -289,6 +301,8 @@ def _seed(conn):
     if "recipes" in names:  # from version 10 (T11.8)
         _insert(conn, "recipes", VALID_ROWS["recipes"])
         _insert(conn, "recipe_versions", VALID_ROWS["recipe_versions"])
+    if "message_drafts" in names:  # from version 11 (T11.5): a message for its drafted mark
+        _insert(conn, "messages", VALID_ROWS["messages"])
 
 
 def _columns(conn, table):
@@ -304,7 +318,7 @@ def test_connect_creates_the_file_in_the_configured_folder_with_every_table(stor
         for row in store_conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
     }
     assert names == TABLES | {SQLITE_SEQUENCE}
-    assert db.schema_version(store_conn) == len(schema.MIGRATIONS) == 10
+    assert db.schema_version(store_conn) == len(schema.MIGRATIONS) == 11
 
 
 def test_the_store_folder_is_gitignored_and_inside_the_project():
@@ -542,7 +556,7 @@ def _time_columns(conn):
 def test_every_timestamp_column_refuses_a_time_that_is_not_utc(store_conn):
     """A local time, or one with another offset, is refused in every *_at column (D21)."""
     columns = _time_columns(store_conn)
-    assert len(columns) == 24  # the recipes', versions' and ratings' created_at since T11.8
+    assert len(columns) == 26  # T11.8's three created_at, T11.5's given_at and withdrawn_at
     _seed(store_conn)
     for table, column in columns:
         for bad in ("2026-10-27T10:00:00", "2026-10-27T10:00:00+01:00", "27.10.2026 10:00"):
@@ -755,7 +769,7 @@ def test_a_migration_8_that_fails_halfway_leaves_the_version_7_file_as_it_was(tm
 
 
 def test_upgrading_a_version_8_file_adds_the_meal_plan_tables_and_keeps_the_rows(tmp_path):
-    """A version 8 file gets migration 9: empty plan tables, every audit row kept."""
+    """A version 8 file gets migrations 9 to 11: empty plan tables, every audit row kept."""
     path = tmp_path / "old.sqlite3"
     audit_rows = _old_file(path, 8)
     with db.connect(path) as conn:
@@ -806,7 +820,7 @@ def test_a_plan_needs_two_users_and_a_food_appears_once_per_meal(store_conn):
 
 
 def test_upgrading_a_version_9_file_adds_the_recipe_tables_and_an_empty_mark(tmp_path):
-    """A version 9 file gets migration 10: empty recipe tables, its meal items kept, unmarked."""
+    """A version 9 file gets migrations 10 and 11: empty recipe tables, its meal items unmarked."""
     path = tmp_path / "old.sqlite3"
     audit_rows = _old_file(path, 9)
     raw = sqlite3.connect(path, autocommit=True)
@@ -818,7 +832,7 @@ def test_upgrading_a_version_9_file_adds_the_recipe_tables_and_an_empty_mark(tmp
     )
     raw.close()
     with db.connect(path) as conn:
-        assert db.schema_version(conn) == len(schema.MIGRATIONS) == 10
+        assert db.schema_version(conn) == len(schema.MIGRATIONS) == 11
         for table in ("recipes", "recipe_versions", "recipe_ingredients", "recipe_ratings"):
             assert conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0] == 0
         marks = [row[0] for row in conn.execute("SELECT from_recipe FROM meal_items")]
@@ -885,6 +899,101 @@ def test_a_meal_item_s_recipe_mark_is_a_positive_id_with_no_foreign_key(store_co
         _insert(store_conn, "meal_items", {**VALID_ROWS["meal_items"], "from_recipe": 0})
     keys = {row["from"] for row in store_conn.execute("PRAGMA foreign_key_list(meal_items)")}
     assert "from_recipe" not in keys
+
+
+def test_one_open_ai_consent_per_purpose_and_relationship(store_conn):
+    """A second open consent for a purpose (and relationship) is refused; a withdrawn one is not."""
+    _seed(store_conn)
+    row = VALID_ROWS["ai_consents"]
+    _insert(store_conn, "ai_consents", row)
+    with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
+        _insert(store_conn, "ai_consents", row)
+    _insert(store_conn, "ai_consents", {**row, "withdrawn_at": NOW})
+    _insert(store_conn, "ai_consents", {**row, "purpose": "media"})
+    thread = {**row, "purpose": "coach_thread", "relationship_id": 1}
+    _insert(store_conn, "ai_consents", thread)
+    with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
+        _insert(store_conn, "ai_consents", thread)
+    _insert(store_conn, "ai_consents", {**thread, "purpose": "client_notes"})
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"purpose": "coach_thread"},  # given to one coach: needs its relationship
+        {"purpose": "client_notes"},
+        {"relationship_id": 1},  # not given to one coach: names none
+        {"purpose": "sharing"},
+        {"text_version": "0123456789AB"},
+        {"text_version": "0123456789a"},
+    ],
+)
+def test_an_ai_consent_row_that_breaks_a_rule_is_refused(store_conn, changes):
+    """A purpose outside the list, a wrong relationship link or a malformed version is refused."""
+    _seed(store_conn)
+    with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
+        _insert(store_conn, "ai_consents", {**VALID_ROWS["ai_consents"], **changes})
+
+
+@pytest.mark.parametrize(
+    "update",
+    [
+        "UPDATE ai_consents SET text_version = 'ffffffffffff'",
+        "UPDATE ai_consents SET purpose = 'media', withdrawn_at = given_at",
+        "UPDATE ai_consents SET given_at = '2026-10-28T10:00:00+00:00', withdrawn_at = given_at",
+        "UPDATE ai_consents SET user_id = 'c1', withdrawn_at = given_at",
+    ],
+)
+def test_an_ai_consent_changes_only_when_it_is_withdrawn(store_conn, update):
+    """Only setting withdrawn_at once is allowed; any other change is refused by the trigger."""
+    _seed(store_conn)
+    _insert(store_conn, "ai_consents", VALID_ROWS["ai_consents"])
+    with pytest.raises(sqlite3.IntegrityError, match="only changes when it is withdrawn"):
+        store_conn.execute(update)
+    store_conn.execute("UPDATE ai_consents SET withdrawn_at = given_at")
+    for again in ("withdrawn_at = NULL", "withdrawn_at = '2026-10-28T10:00:00+00:00'"):
+        with pytest.raises(sqlite3.IntegrityError, match="only changes when it is withdrawn"):
+            store_conn.execute(f"UPDATE ai_consents SET {again}")
+
+
+# --- Art. 9 consents and drafted messages (T11.5, migration 11) ---------------------------------
+
+
+def test_upgrading_a_version_10_file_adds_the_consent_and_drafted_tables_and_keeps_the_rows(
+    tmp_path,
+):
+    """A version 10 file gets migration 11: empty consent and drafted tables, audit rows kept."""
+    path = tmp_path / "old.sqlite3"
+    audit_rows = _old_file(path, 10)
+    with db.connect(path) as conn:
+        assert db.schema_version(conn) == len(schema.MIGRATIONS) == 11
+        assert conn.execute("SELECT count(*) FROM ai_consents").fetchone()[0] == 0
+        assert conn.execute("SELECT count(*) FROM message_drafts").fetchone()[0] == 0
+        assert [tuple(row) for row in conn.execute("SELECT * FROM audit_log ORDER BY id")] == (
+            audit_rows
+        )
+
+
+def test_a_migration_11_that_fails_halfway_leaves_the_version_10_file_as_it_was(tmp_path):
+    """A failure after migration 11 made both tables undoes it: version 10, no new table."""
+    path = tmp_path / "old.sqlite3"
+    _old_file(path, 10)
+    raw = sqlite3.connect(path, autocommit=True)
+    # A trigger already named as migration 11's last one makes it fail after both tables.
+    raw.execute(
+        "CREATE TRIGGER message_drafts_never_changed BEFORE DELETE ON users BEGIN SELECT 1; END"
+    )
+    raw.close()
+    with pytest.raises(sqlite3.OperationalError, match="message_drafts_never_changed"):
+        with db.connect(path):
+            pass
+    raw = sqlite3.connect(path)
+    try:
+        assert raw.execute("PRAGMA user_version").fetchone()[0] == 10
+        names = {row[0] for row in raw.execute("SELECT name FROM sqlite_master")}
+        assert not {"ai_consents", "message_drafts"} & names
+    finally:
+        raw.close()
 
 
 # --- A second process: write-ahead log mode and the busy timeout (T11.3, D24) ---------------------
@@ -1368,9 +1477,9 @@ def test_the_audit_check_and_access_action_list_the_same_actions(store_conn):
     )
 
 
-@pytest.mark.parametrize("migrations", [1, 2, 3, 4, 5, 6, 7, 8])
+@pytest.mark.parametrize("migrations", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
 def test_upgrading_an_older_file_keeps_every_audit_row_index_and_trigger(tmp_path, migrations):
-    """A version 1 to 8 file with audit rows reaches version 9, its rows, IDs and guards kept."""
+    """A version 1 to 10 file with audit rows reaches version 11, its rows, IDs and guards kept."""
     path = tmp_path / "old.sqlite3"
     before = _old_file(path, migrations)
     with db.connect(path) as conn:

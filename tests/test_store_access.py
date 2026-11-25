@@ -109,6 +109,14 @@ OWN_ONLY = {
     # T11.8: whether a recipe is the gymer's current coach's; called by records.add_recipe_items()
     # and the ratings inside their transactions, for the user they write or read for.
     "recipes.recipe_for_client",
+    # T11.5: the gymer's own Art. 9 consents (a coach, another user or a foreign relationship gets
+    # NotFound, and is_given() False; tests/test_store_ai_consents.py).
+    "ai_consents.current",
+    "ai_consents.is_given",
+    # T11.5: the gymer's own undrafted messages of their active thread (never the coach's).
+    "drafts.undrafted_messages",
+    "drafts.is_open_thread",
+    "drafts.is_still_undrafted",
 }
 WRITES = {
     # Each takes the user it writes for; the ones that change shared data check that it is the
@@ -147,6 +155,12 @@ WRITES = {
     "questions.answer_question",
     # T9.29: the acting user's own read mark only.
     "notifications.mark_all_read",
+    # T11.5: the gymer's own consents only, (b) and (e) for their own active relationship.
+    "ai_consents.give",
+    "ai_consents.withdraw",
+    # T11.5: the drafted mark of the gymer's own message, and with it the step's own entries.
+    "drafts.mark_finished",
+    "drafts.save_step",
 }
 INTERNALS = {
     # No user data in or out: opening the file, checks, and the access layer itself.

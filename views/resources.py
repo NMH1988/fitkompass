@@ -5,7 +5,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from src import account, chat, config, demo, llm
+from src import account, chat, config, demo, drafting, llm
 from src.rag import hybrid, store
 
 
@@ -39,6 +39,12 @@ def translation_model():
 def review_model():
     """Build the weekly review model's client once per app process (T9.16)."""
     return llm.build_chat_model(config.REVIEW_MODEL, config.REVIEW_MAX_TOKENS)
+
+
+@st.cache_resource(show_spinner=False)
+def draft_model():
+    """Build the model that drafts log entries from a gymer's messages once per process (T11.5)."""
+    return drafting.build_model()
 
 
 @st.cache_resource(show_spinner=False)

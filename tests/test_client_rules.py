@@ -10,7 +10,10 @@ What it cannot see: a method or a client class reached at run time (`getattr(mod
 (`Chat = ChatOpenAI; Chat(...)`), and `setattr(client, ...)`. Review still checks those. A class
 reached through a module (`lo.ChatOpenAI(...)`) or an import alias is caught. It is strict the
 other way: assigning `.model`, `.base_url` or another setting's name on any object is refused, even
-on an object that is not a model client; rename such a field.
+on an object that is not a model client; rename such a field. One pass-through is allowed, in
+`src/llm.py` only: `ChatOpenAI(..., extra_body=routing)`, OpenRouter's provider routing built from
+the providers tuple when the client is built (T11.5); any other `extra_body` or `model_kwargs` is
+refused.
 """
 
 import ast
@@ -99,6 +102,19 @@ def _names_a_model(call: ast.Call) -> bool:
     return isinstance(model, ast.Constant) and isinstance(model.value, str)
 
 
+def _routing_at_build(call: ast.Call, keyword: ast.keyword, builds_clients: bool) -> bool:
+    """Return True for the one allowed pass-through: OpenRouter's routing, set when built."""
+    # src/llm.py builds ChatOpenAI with extra_body=routing, a name it fills with the provider
+    # object only (T11.5); anything else, anywhere else, stays refused.
+    return (
+        builds_clients
+        and _called_name(call) == "ChatOpenAI"
+        and keyword.arg == "extra_body"
+        and isinstance(keyword.value, ast.Name)
+        and keyword.value.id == "routing"
+    )
+
+
 def violations(source: str, *, builds_clients: bool = False) -> list[str]:
     """Return one line per broken client rule in the source, with its line number."""
     found = []
@@ -109,7 +125,9 @@ def violations(source: str, *, builds_clients: bool = False) -> list[str]:
             name = _called_name(node)
             method = name if isinstance(node.func, ast.Attribute) else None
             for keyword in node.keywords:
-                if keyword.arg in PASS_THROUGH:
+                if keyword.arg in PASS_THROUGH and not _routing_at_build(
+                    node, keyword, builds_clients
+                ):
                     found.append(f"{node.lineno}: {keyword.arg}= passed to {name}()")
                 elif method in CALL_TIME_METHODS and keyword.arg in CLIENT_SETTINGS:
                     found.append(f"{node.lineno}: call-time {keyword.arg}= in .{method}()")
@@ -240,6 +258,24 @@ ALLOWED = [
 def test_an_allowed_call_passes(source):
     """Binding the tools alone, structured output with no setting, and plain calls pass."""
     assert violations(source) == []
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "ChatOpenAI(model=m, extra_body={'models': x})",
+        "ChatOpenAI(model=m, extra_body=other)",
+        "ChatOpenAI(model=m, model_kwargs=routing)",
+        "client.bind(extra_body=routing)",
+        "client.invoke(m, extra_body=routing)",
+        "OpenAIEmbeddings(extra_body=routing)",
+    ],
+)
+def test_only_the_routing_at_build_passes_through(source):
+    """In src/llm.py only ChatOpenAI(..., extra_body=routing) is allowed; the rest is caught."""
+    assert violations("ChatOpenAI(model=m, extra_body=routing)", builds_clients=True) == []
+    assert violations(source, builds_clients=True)
+    assert violations("ChatOpenAI(model=m, extra_body=routing)")  # outside src/llm.py
 
 
 def test_the_client_module_may_build_clients_but_not_bind_settings():

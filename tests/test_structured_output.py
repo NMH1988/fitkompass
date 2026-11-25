@@ -10,10 +10,20 @@ import pytest
 from pydantic import BaseModel
 
 from src import config, llm
+from src.drafting import DraftEntries, FoodEntry, SetGroup, WeightEntry
 from src.rag.query_translation import QueryPlan
 from src.weekly_review import Recommendation, Statement, WeeklyReview
 
-MODELS = (QueryPlan, WeeklyReview, Statement, Recommendation)
+MODELS = (
+    QueryPlan,
+    WeeklyReview,
+    Statement,
+    Recommendation,
+    DraftEntries,
+    FoodEntry,
+    WeightEntry,
+    SetGroup,
+)
 PROMPTS = sorted((config.PROJECT_ROOT / "src" / "prompts").glob("*.md"))
 FAKE_KEY = "sk-test-not-a-real-key"
 # Decision, ticket, owner-task and criterion IDs: a developer reads them in a docstring, but the
@@ -127,7 +137,9 @@ def test_every_model_and_field_has_a_description(model):
         assert not PROJECT_ID.search(text), f"{where} names a project ID: {text}"
 
 
-@pytest.mark.parametrize("model", [QueryPlan, WeeklyReview], ids=lambda model: model.__name__)
+@pytest.mark.parametrize(
+    "model", [QueryPlan, WeeklyReview, DraftEntries], ids=lambda model: model.__name__
+)
 def test_the_strict_schema_sent_keeps_every_description(model):
     """The strict schema the real client sends carries every description, all fields required."""
     sent = _schema_sent(model)

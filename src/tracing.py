@@ -95,7 +95,11 @@ _IDENTIFIER = re.compile(r"[A-Za-z0-9_./:|-]{1,200}")
 PROMPT_ANSWER_KEY = "prompt_answer"
 PROMPT_QUERY_KEY = "prompt_query"
 PROMPT_REVIEW_KEY = "prompt_review"
-PROMPT_VERSION_KEYS = frozenset({PROMPT_ANSWER_KEY, PROMPT_QUERY_KEY, PROMPT_REVIEW_KEY})
+# The owner's instruction for drafting log entries from a gymer's messages (T11.5).
+PROMPT_DRAFTS_KEY = "prompt_drafts"
+PROMPT_VERSION_KEYS = frozenset(
+    {PROMPT_ANSWER_KEY, PROMPT_QUERY_KEY, PROMPT_REVIEW_KEY, PROMPT_DRAFTS_KEY}
+)
 _PROMPT_VERSION = re.compile(rf"[0-9a-f]{{{config.PROMPT_VERSION_LENGTH}}}")
 # Codes the app writes itself (a turn's code, a review's outcome). A review's failed checks
 # (`errors`, e.g. diagnosis, calorie_floor) hint at a client's health, so they are masked and stay
