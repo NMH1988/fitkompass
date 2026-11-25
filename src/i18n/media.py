@@ -50,7 +50,7 @@ EN: dict[str, str] = {
     ),
     "media.made_up_voice": (
         "While the app holds made-up data, play a prepared synthetic recording of made-up entries "
-        "into the microphone instead of your own voice."
+        "into the microphone, so no real voice is sent, yours included."
     ),
     "media.upload": "Photo of your meal (JPG or PNG, at most {mb} MB)",
     "media.camera": "Photo of your meal",
@@ -147,8 +147,9 @@ DE: dict[str, str] = {
         "Personen im Bild."
     ),
     "media.made_up_voice": (
-        "Solange die App erfundene Daten enthält, spielen Sie statt Ihrer eigenen Stimme eine "
-        "vorbereitete synthetische Aufnahme erfundener Einträge in das Mikrofon ab."
+        "Solange die App erfundene Daten enthält, spielen Sie eine vorbereitete synthetische "
+        "Aufnahme erfundener Einträge in das Mikrofon ab, damit keine echte Stimme gesendet wird, "
+        "auch nicht Ihre."
     ),
     "media.upload": "Foto Ihrer Mahlzeit (JPG oder PNG, höchstens {mb} MB)",
     "media.camera": "Foto Ihrer Mahlzeit",

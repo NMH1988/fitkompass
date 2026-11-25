@@ -159,11 +159,19 @@ def test_a_transcript_the_guard_refuses_makes_no_draft_and_no_further_call(gymer
     assert "guard_rejected" in events and "media_draft" in events
 
 
-def test_an_empty_reading_ends_the_run_with_no_second_call(gymer):
-    """A model that reads nothing in the file drafts nothing."""
-    first, draft = _media_model("   "), _draft_model(ONE_FOOD)
+@pytest.mark.parametrize("reply", ["   ", "NONE", " none. ", '"NONE"'])
+def test_an_empty_reading_or_none_ends_the_run_with_no_second_call(gymer, reply):
+    """A model that reads nothing (or answers the instructions' NONE) drafts nothing."""
+    first, draft = _media_model(reply), _draft_model(ONE_FOOD)
     _, result = _start(first, draft)
     assert result.outcome == "nothing" and draft.calls == []
+
+
+def test_a_reading_that_only_mentions_none_is_drafted(gymer):
+    """NONE inside a longer text is not the fixed answer: the text goes on to the draft call."""
+    first, draft = _media_model("None of the oats were eaten, about 80 g of rice."), _draft_model()
+    _start(first, draft)
+    assert len(draft.calls) == 1
 
 
 def test_a_reading_with_no_entry_ends_the_run(gymer):

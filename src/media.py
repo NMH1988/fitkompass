@@ -44,6 +44,8 @@ _PHOTO_PLUGINS = ("JPEG", "PNG")
 _PHOTO_FORMATS = frozenset({"JPEG", "MPO", "PNG"})
 # The sample widths, in bytes, that wave writes back (it reads wider ones it cannot write).
 _SAMPLE_WIDTHS = frozenset({1, 2, 3, 4})
+# The fixed answer the owner's instructions give when there is nothing to describe or transcribe.
+NOTHING_REPLY = "NONE"
 # What a transparent part of a PNG becomes in the JPEG.
 _BACKGROUND = (255, 255, 255)
 
@@ -171,6 +173,13 @@ def reply_text(reply: object) -> str:
         ]
         return "".join(part for part in parts if isinstance(part, str)).strip()
     return ""
+
+
+def is_nothing(text: str) -> bool:
+    """Return True for an empty reading or the instructions' fixed answer for one (NONE)."""
+    # The owner's instructions (O19) answer exactly NONE when there is nothing to describe or
+    # transcribe; a run then ends without the draft call. A period or quotes around it count too.
+    return text.strip().strip(".\"'`").strip().upper() in ("", NOTHING_REPLY)
 
 
 def read_media(model: BaseChatModel, kind: Kind, prompt_text: str, data: bytes) -> str:

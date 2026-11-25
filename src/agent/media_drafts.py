@@ -150,7 +150,7 @@ def read(state: MediaState, runtime: Runtime[MediaContext]) -> dict[str, Any]:
         runtime.context.media_prompt.text,
         runtime.context.file,
     )
-    if not text:
+    if media.is_nothing(text):
         return {"outcome": "nothing"}
     return {"text": text}
 
