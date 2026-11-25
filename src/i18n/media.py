@@ -62,9 +62,9 @@ EN: dict[str, str] = {
     "media.button_help": "Sends this file to the AI model, then shows the drafts for you to check.",
     "media.working": "Reading the file and drafting entries…",
     "media.ai_label.photo": (
-        "Drafted by an AI model ({provider} through OpenRouter) from your photo; the values come "
-        "from the USDA table and the app's checks. Check every card: nothing is logged until you "
-        "save."
+        "Drafted by an AI model ({provider} through OpenRouter) from your photo; the amounts are "
+        "the AI's estimates, the nutrients come from the USDA table and the app's checks. Check "
+        "every card: nothing is logged until you save."
     ),
     "media.ai_label.voice": (
         "Drafted by an AI model ({provider} through OpenRouter) from your voice note; the values "
@@ -164,9 +164,9 @@ DE: dict[str, str] = {
     ),
     "media.working": "Die Datei wird gelesen und Einträge werden entworfen …",
     "media.ai_label.photo": (
-        "Von einem KI-Modell ({provider} über OpenRouter) aus Ihrem Foto entworfen; die Werte "
-        "stammen aus der USDA-Tabelle und den Prüfungen der App. Prüfen Sie jede Karte: Nichts "
-        "wird eingetragen, bevor Sie speichern."
+        "Von einem KI-Modell ({provider} über OpenRouter) aus Ihrem Foto entworfen; die Mengen "
+        "sind Schätzungen der KI, die Nährwerte stammen aus der USDA-Tabelle und den Prüfungen der "
+        "App. Prüfen Sie jede Karte: Nichts wird eingetragen, bevor Sie speichern."
     ),
     "media.ai_label.voice": (
         "Von einem KI-Modell ({provider} über OpenRouter) aus Ihrer Sprachnachricht entworfen; "

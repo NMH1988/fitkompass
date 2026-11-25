@@ -443,3 +443,11 @@ def test_the_server_s_upload_limit_matches_config_and_fits_the_spool():
     assert config.PHOTO_MAX_BYTES < limit and config.VOICE_MAX_BYTES < limit
     overhead = starlette_routes._MAX_UPLOAD_MULTIPART_OVERHEAD_BYTES
     assert config.UPLOAD_SPOOL_MAX_BYTES >= limit + overhead
+
+
+@pytest.mark.parametrize("path", [config.PHOTO_PROMPT_PATH, config.VOICE_PROMPT_PATH])
+def test_the_owner_s_instructions_name_the_code_s_limit_and_none(path):
+    """Each instruction asks for at most the guard's limit and answers NONE as the code reads it."""
+    text = path.read_text(encoding="utf-8")
+    assert str(config.MEDIA_TEXT_MAX_CHARS) in text
+    assert media.NOTHING_REPLY in text and media.is_nothing(media.NOTHING_REPLY)
