@@ -189,7 +189,7 @@ def tool_names() -> frozenset[str]:
     # Imported here: these modules import much of the app, which imports this one.
     from src import preferences
     from src.agent import search
-    from src.tools import coach_clients, registry
+    from src.tools import client_thread, coach_clients, registry
 
     return frozenset(
         {
@@ -202,6 +202,8 @@ def tool_names() -> frozenset[str]:
             # T9.17: the coach's client tools; their arguments and results are masked as any other.
             coach_clients.LIST_TOOL,
             coach_clients.WEEK_TOOL,
+            # T11.6a: the coach's thread tool; its messages are masked as any other result.
+            client_thread.THREAD_TOOL,
         }
     )
 

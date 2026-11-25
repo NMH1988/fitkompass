@@ -50,6 +50,7 @@ from src.rag.sources import (
     Source,
 )
 from src.tools import coach_clients, meal_plan, registry
+from src.tools.client_thread import ThreadResult
 from src.tools.energy import FORMULA_SOURCES, MACRO_SOURCES, FormulaSource, Macro, TdeeResult
 from src.tools.food import FoodLookupResult, FoodTableError, food_source_line, read_usda_release
 from src.tools.meal_plan import MealPlanResult
@@ -527,9 +528,13 @@ def _tool_run_flowables(
         body = _food_flowables(result, lang)
     elif isinstance(result, MealPlanResult) and result.status != "invalid":
         body = _meal_plan_flowables(result, lang)
-    elif isinstance(result, coach_clients.ClientListResult | coach_clients.ClientWeekResult):
-        # A coach's client tools (T9.17): their table is in the app; the answer above names the
-        # clients, and the message written for the model is not repeated.
+    elif isinstance(
+        result,
+        coach_clients.ClientListResult | coach_clients.ClientWeekResult | ThreadResult,
+    ):
+        # A coach's client tools (T9.17) and a client's thread (T11.6a): their table is in the
+        # app, never in the PDF; the answer above names the clients, and the message written for
+        # the model is not repeated.
         body = [_para(i18n.t("pdf.client_tool", lang), "small")]
     else:
         # A refused or failed call: the fixed message, never what the model sent.

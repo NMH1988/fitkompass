@@ -50,7 +50,7 @@ from src.rag.query_translation import Domain, QueryPlan
 from src.rag.retriever import RetrievedChunk, embed_queries
 from src.rag.sources import ManifestError, Source, license_url_for, load_manifest
 from src.rag.store import IndexNotReadyError
-from src.tools import registry
+from src.tools import client_thread, registry
 from src.tools.coach_clients import CoachClients
 from src.tools.food import FoodLookupResult
 from src.tools.food_api import FOOD_API_FAILURES, FoodSearch
@@ -722,6 +722,11 @@ class TurnCallbacks:
     on_chunks: Callable[[Sequence[RetrievedChunk]], None] | None = None
 
 
+def _no_thread_open(_reference: str) -> bool:
+    """Answer that no client's thread may reach the model (a turn with no coach's session)."""
+    return False
+
+
 def run_turn(
     text: str,
     limiter: guard.RateLimiter,
@@ -776,6 +781,9 @@ def run_turn(
         if callbacks.on_step is not None:
             callbacks.on_step(name)
 
+    # The threads the turn holds (T11.6a): the graph fills it, the food tool reads it.
+    thread_calls: set[str] = set()
+
     def graph_turn() -> TurnResult:
         """Run the turn's graph: the guard first, the index and the models only if it passes."""
         # The one place a TurnContext is built from the turn's deps (T10.7). Each factory runs at
@@ -791,6 +799,8 @@ def run_turn(
                     client_names=deps.coach.client_names if deps.coach is not None else (),
                     # A coach's client tools and this chat's references (T9.17).
                     clients=deps.clients,
+                    # No USDA API call while the turn holds a client's thread (T11.6a).
+                    api_open=lambda: not thread_calls,
                 )
             ),
             on_step=step,
@@ -808,21 +818,38 @@ def run_turn(
             turn_id=turn_id,
             coach=deps.coach,
             prompts=prompts,
+            # Each client's thread is checked again before every model call (T11.6a). With no
+            # coach's session (a guest, or a store that could not be read) every thread counts
+            # as closed, so a marked earlier answer is never sent unchecked.
+            thread_calls=thread_calls,
+            thread_open=(
+                _no_thread_open
+                if deps.clients is None
+                else partial(client_thread.is_open, deps.clients, turn_id=turn_id)
+            ),
         )
 
         def turn_graph(
-            history: list[BaseMessage], domains: Mapping[str, Domain] | None = None
+            history: list[BaseMessage],
+            domains: Mapping[str, Domain] | None = None,
+            threads: Mapping[str, Sequence[str]] | None = None,
         ) -> Mapping[str, Any]:
             """Run the turn's graph after these earlier messages and return its output."""
-            # domains: each earlier question's domain, by its message id (T10.5).
+            # domains: each earlier question's domain, by its message id (T10.5); threads:
+            # the clients whose thread each earlier answer may hold (T11.6a).
             return graph.chat_graph().invoke(
-                {"text": text, "history": history, "history_domains": domains or {}},
+                {
+                    "text": text,
+                    "history": history,
+                    "history_domains": domains or {},
+                    "history_threads": threads or {},
+                },
                 context=context,
                 config=graph.run_config(turn_id, deps.run_trace, versions),
             )
 
         if conversation is None:
-            return turn_graph([], {})["result"]
+            return turn_graph([], {}, {})["result"]
         return conversation.run(turn_graph, turn_id, versions)
 
     def failed(message: str, code: str, *, index_not_ready: bool = False) -> TurnResult:

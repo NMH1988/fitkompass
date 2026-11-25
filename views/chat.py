@@ -20,9 +20,9 @@ from src import account as accounts
 
 # src.chat is imported as `turns`: this module is views.chat, and the name `chat` would hide it.
 from src import chat as turns
-from src import config, guard, preferences, usage
+from src import config, guard, preferences, recipes, usage
 from src.store.access import NotFound
-from src.tools import coach_clients
+from src.tools import client_thread, coach_clients
 from src.tools import food_api as fdc
 from views import account, resources, sources, tables, tool_results, usage_view
 from views.text import lang, t
@@ -95,6 +95,10 @@ def with_client_names(text: str) -> str:
     refs = client_refs()
     if refs is None:
         return text
+    # A coach's chat may hold a client's messages (T11.6a), text a third party wrote: no link,
+    # image, autolink or LaTeX is shown, so a click or a load can never carry another client's
+    # data to an outside host. Bold, lists and headings stay.
+    text = tables.dollars(recipes.unlinked_markdown(text))
     # A display name is a user's own text: shown as written, never as Markdown or a link.
     return coach_clients.name_references(text, refs.names(), tables.one_line)
 
@@ -114,6 +118,15 @@ def coach_clients_for_turn() -> coach_clients.CoachClients | None:
     )
 
 
+def show_left_out(result: turns.TurnResult) -> None:
+    """Say how many of a client's messages the guards kept from the AI, and where to read them."""
+    # Written by the page from the tool results, never left to the model (T11.6a): a left-out
+    # message may be about an injury the coach must read.
+    count = sum(client_thread.left_out(run.result) for run in result.tool_runs)
+    if count:
+        st.warning(t("coach_ai.left_out", count=count), icon=":material/visibility_off:")
+
+
 def show_result(result: turns.TurnResult, turn: int) -> None:
     """Show a turn's answer with its sources and tool results, or its fixed message."""
     if result.kind == "rejected":
@@ -121,14 +134,18 @@ def show_result(result: turns.TurnResult, turn: int) -> None:
     elif result.kind == "guardrail":
         # A refusal or a pointer to a professional (AC-12), not an error.
         st.info(fixed_text(result), icon=":material/health_and_safety:")
+        # A program caught after a thread read keeps its tool runs (T11.6a).
+        show_left_out(result)
     elif result.kind == "error":
         st.error(fixed_text(result), icon=":material/error:")
     elif result.kind == "memory":
         # A coach's turn that only proposed a preference, or said why it could not (T9.7).
         st.info(fixed_text(result), icon=":material/bookmark:")
+        show_left_out(result)
     else:
         # Model output as Markdown, never with unsafe_allow_html (docs/SECURITY.md).
         st.markdown(fixed_text(result))
+        show_left_out(result)
         if result.not_remembered:
             # The chat's memory did not keep it (T10.1); the answer already read stays shown.
             st.caption(t("ask.not_remembered"))
@@ -256,7 +273,8 @@ def proposal_card(text: str) -> None:
     """Show the proposed preference with Save, Edit and Discard and the note on what it may hold."""
     with st.container(border=True, key="memory_card"):
         # The text is the model's: shown as written, never read as Markdown (docs/SECURITY.md).
-        st.markdown(t("memory.remember", text=turns.escape_markdown(text)))
+        # Escaped on one line with every link broken: a proposal may word a client's message.
+        st.markdown(t("memory.remember", text=tables.one_line(text)))
         st.caption(t("memory.note"))
         if st.session_state.get(EDITING_KEY):
             st.text_area(
@@ -336,7 +354,9 @@ def run_turn(question: str, turn: int) -> None:
     memory = coach_memory()
 
     deps = turns.TurnDeps(
-        chat_model=resources.chat_model,
+        # A coach's chat may read a client's thread (T11.6a), so its model is pinned to the
+        # provider consent (b) names; a guest's chat is not.
+        chat_model=resources.coach_chat_model if coach_id() is not None else resources.chat_model,
         translation_model=resources.translation_model,
         open_index=resources.index,
         keyword_index=resources.keyword_index,

@@ -13,6 +13,7 @@ AC-5).
 from src.i18n import (
     account,
     chat,
+    coach_thread,
     dashboards,
     drafts,
     food,
@@ -49,6 +50,7 @@ PAGES = (
     account,
     thread,
     drafts,
+    coach_thread,
 )
 for _page in PAGES:
     add_texts(_page.__name__, _page.EN, _page.DE)

@@ -21,6 +21,7 @@ Keep the entry short and record what the code does not say. `tests/test_docs_lay
 
 ---
 
+- [2026-11-25 · T11.6a The client's thread in the coach's AI chat, part 1: the tool, consent (b)'s switches and the open chat · PR not opened yet (closes NMH1988/fitkompass#13)](progress/2026-11-25-T11.6a.md)
 - [2026-11-25 · T11.18 Plan: entries of the same food grouped by meal on Today · NMH1988/fitkompass#45 (closes NMH1988/fitkompass#44)](progress/2026-11-25-T11.18.md)
 - [2026-11-24 · T11.5 Draft log entries from a gymer's messages, approved by the gymer, with Art. 9 consent · NMH1988/fitkompass#43 (closes NMH1988/fitkompass#12)](progress/2026-11-24-T11.5.md)
 - [2026-11-24 · T11.8 Records: status done after the merge · NMH1988/fitkompass#41 (closes NMH1988/fitkompass#40)](progress/2026-11-24-T11.8-2.md)

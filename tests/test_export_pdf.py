@@ -14,7 +14,7 @@ from reportlab.pdfbase import pdfmetrics
 from src import chat, config, export_pdf, guardrails, i18n
 from src.guardrails import Concern
 from src.rag.sources import ARTICLE_CHANGES_NOTE, Source
-from src.tools import coach_clients, food_api, meal_plan, registry
+from src.tools import client_thread, coach_clients, food_api, meal_plan, registry
 from src.tools.energy import FORMULA_SOURCES, MACRO_SOURCES, TDEE_METHOD
 from src.tools.food import lookup_food_nutrition
 from src.tools.registry import (
@@ -524,7 +524,8 @@ def test_every_turn_kind_has_a_label():
 
 def test_tool_titles_match_the_tools():
     """Every tool, and a refused call (None), has a heading in the app and the PDF."""
-    coach = {coach_clients.LIST_TOOL, coach_clients.WEEK_TOOL}  # a coach's chat only (T9.17)
+    # A coach's chat only (T9.17, T11.6a).
+    coach = {coach_clients.LIST_TOOL, coach_clients.WEEK_TOOL, client_thread.THREAD_TOOL}
     assert set(registry.TOOL_TITLES) == {
         TDEE_TOOL,
         MACRO_TOOL,
@@ -989,3 +990,26 @@ def test_a_client_tool_result_gets_a_line_for_people(lang):
     texts = [item.getPlainText() for item in flowables]
     assert texts[1] == i18n.t("pdf.client_tool", lang)
     assert coach_clients.LIST_MESSAGE not in " ".join(texts)
+
+
+@pytest.mark.parametrize("lang", ["en", "de"])
+def test_a_thread_result_gets_the_line_for_people_and_no_message(lang):
+    """A client's thread (T11.6a) shows the fixed line in the PDF, never a message's text."""
+    export_pdf._register_fonts()
+    result = client_thread.ThreadResult(
+        status="ok",
+        message=client_thread.RESULT_MESSAGE,
+        client="client-1",
+        today=date(2026, 10, 28),
+        week_start=date(2026, 10, 26),
+        week_end=date(2026, 11, 1),
+        messages=[
+            client_thread.ThreadMessage(
+                side="client", day=date(2026, 10, 27), time_of_day="08:00", text="CANARY-PDF oats"
+            )
+        ],
+    )
+    run = registry.ToolRun(client_thread.THREAD_TOOL, "ok", result)
+    texts = [item.getPlainText() for item in export_pdf._tool_run_flowables(run, "metric", lang)]
+    assert texts[1] == i18n.t("pdf.client_tool", lang)
+    assert "CANARY-PDF" not in " ".join(texts)

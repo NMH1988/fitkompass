@@ -11,6 +11,7 @@ import importlib
 import inspect
 import re
 import sqlite3
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,7 @@ import pytest
 from src import config
 from src.store import (
     access,
+    ai_consents,
     invitations,
     meal_plans,
     messages,
@@ -204,7 +206,15 @@ NAME_READS = {"users.display_name_of"}
 # The thread between a coach and a client (T11.3): read by its two sides, also after the end, and
 # written by them only while the relationship is active, checked by the relationship itself (no
 # scope) and not audited (owner's choices, 2026-11-19); tested at the end of this file.
-THREAD_FUNCTIONS = {"messages.send_message", "messages.list_messages"}
+# The coach's AI reads the coach's active thread with a client (T11.6a) only with the client's
+# consent (b) for that use, by the same relationship check, not audited (owner's choice,
+# 2026-11-23); tested at the end of this file.
+THREAD_FUNCTIONS = {
+    "messages.send_message",
+    "messages.list_messages",
+    "messages.thread_for_coach_ai",
+    "messages.is_open_for_coach_ai",
+}
 
 # The coach's recipe library and the clients' ratings (T11.8): a recipe is the coach's own content,
 # written and deleted only by its coach and read by the coach's current clients, checked by the
@@ -1193,3 +1203,110 @@ def test_only_a_coach_reads_rating_summaries(store_conn, relationships, actor):
     """A gymer, a missing user or a value that is not an ID gets NotFound."""
     with pytest.raises(access.NotFound):
         ratings.rating_summaries(store_conn, actor)
+
+
+# --- The coach's AI reads a thread (T11.6a) -----------------------------------------------------
+
+AI_VERSION = "0123456789ab"
+WEEK = (
+    datetime(2026, 11, 23, tzinfo=UTC),
+    datetime(2026, 11, 30, tzinfo=UTC),
+)
+
+
+def _give_chat(conn, gymer, thread, use="chat", version=AI_VERSION):
+    """Switch a use of the gymer's consent (b) on for this relationship."""
+    ai_consents.give(conn, gymer, "coach_thread", version, thread, use)
+
+
+def _ai_read(conn, coach, gymer, use="chat", version=AI_VERSION, limit=50):
+    """Read the week's thread as the coach's AI."""
+    return messages.thread_for_coach_ai(
+        conn, coach, gymer, use, version, start=WEEK[0], end=WEEK[1], limit=limit
+    )
+
+
+def _sent(conn, thread, sender, text, when):
+    """Store a message as sent at a given time (UTC text)."""
+    conn.execute(
+        "INSERT INTO messages (relationship_id, sender_id, text, created_at) VALUES (?, ?, ?, ?)",
+        (thread, sender, text, when),
+    )
+
+
+def test_the_coachs_ai_reads_the_weeks_thread_with_the_chat_use_on(store_conn, relationships):
+    """Both sides' messages of the week, oldest first, the newest `limit` kept, no audit row."""
+    thread = relationships[world.SHARED]
+    _give_chat(store_conn, world.SHARED, thread)
+    _sent(store_conn, thread, world.SHARED, "before the week", "2026-11-22T22:59:59+00:00")
+    _sent(store_conn, thread, world.SHARED, "m1", "2026-11-23T08:00:00+00:00")
+    _sent(store_conn, thread, world.COACH_A, "m2", "2026-11-24T08:00:00+00:00")
+    _sent(store_conn, thread, world.SHARED, "m3", "2026-11-29T22:59:59+00:00")
+    _sent(store_conn, thread, world.SHARED, "after the week", "2026-11-30T00:00:00+00:00")
+    found = _ai_read(store_conn, world.COACH_A, world.SHARED)
+    assert [(m["sender_id"], m["text"]) for m in found] == [
+        (world.SHARED, "m1"),
+        (world.COACH_A, "m2"),
+        (world.SHARED, "m3"),
+    ]
+    newest = _ai_read(store_conn, world.COACH_A, world.SHARED, limit=2)
+    assert [m["text"] for m in newest] == ["m2", "m3"]
+    assert messages.is_open_for_coach_ai(
+        store_conn, world.COACH_A, world.SHARED, "chat", AI_VERSION
+    )
+    assert _audit_rows(store_conn) == []
+
+
+AI_REFUSED = {
+    "no consent (b)": dict(give=False),
+    "another use on": dict(use_given="reply"),
+    "an older text": dict(version_given="ba9876543210"),
+    "a stranger coach": dict(coach=world.COACH_B),
+    "the client as reader": dict(coach=world.SHARED),
+    "a missing client": dict(gymer=world.MISSING),
+    "a malformed coach": dict(coach=""),
+    "an unknown use": dict(use="summary"),
+}
+
+
+@pytest.mark.parametrize("case", AI_REFUSED)
+def test_every_refused_ai_read_is_the_same_not_found_with_no_audit(store_conn, relationships, case):
+    """No consent, another use, an older text, a stranger or a bad value: one NotFound."""
+    options = AI_REFUSED[case]
+    thread = relationships[world.SHARED]
+    if options.get("give", True):
+        _give_chat(
+            store_conn,
+            world.SHARED,
+            thread,
+            options.get("use_given", "chat"),
+            options.get("version_given", AI_VERSION),
+        )
+    _sent(store_conn, thread, world.SHARED, TEXT, "2026-11-24T08:00:00+00:00")
+    coach = options.get("coach", world.COACH_A)
+    gymer = options.get("gymer", world.SHARED)
+    use = options.get("use", "chat")
+    with pytest.raises(access.NotFound, match="^not found$"):
+        _ai_read(store_conn, coach, gymer, use)
+    assert not messages.is_open_for_coach_ai(store_conn, coach, gymer, use, AI_VERSION)
+    assert _audit_rows(store_conn) == []
+
+
+def test_an_ended_relationship_and_a_new_coach_get_no_ai_read(store_conn, relationships):
+    """After the end the former coach's AI reads nothing; a (b) given to them is no consent now."""
+    thread = relationships[world.SHARED]
+    _give_chat(store_conn, world.SHARED, thread)
+    _sent(store_conn, thread, world.SHARED, TEXT, "2026-11-24T08:00:00+00:00")
+    users.end_relationship(store_conn, world.SHARED, thread)
+    with pytest.raises(access.NotFound):
+        _ai_read(store_conn, world.COACH_A, world.SHARED)
+    assert not messages.is_open_for_coach_ai(
+        store_conn, world.COACH_A, world.SHARED, "chat", AI_VERSION
+    )
+    # The same coach again: a new relationship needs a new consent (b).
+    new = users.start_relationship(store_conn, world.COACH_A, world.SHARED)
+    _sent(store_conn, new, world.SHARED, TEXT, "2026-11-24T09:00:00+00:00")
+    with pytest.raises(access.NotFound):
+        _ai_read(store_conn, world.COACH_A, world.SHARED)
+    _give_chat(store_conn, world.SHARED, new)
+    assert [m["text"] for m in _ai_read(store_conn, world.COACH_A, world.SHARED)] == [TEXT]
