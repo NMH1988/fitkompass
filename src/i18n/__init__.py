@@ -16,6 +16,7 @@ from src.i18n import (
     dashboards,
     drafts,
     food,
+    media,
     messages,
     profile,
     recipes,
@@ -49,6 +50,7 @@ PAGES = (
     account,
     thread,
     drafts,
+    media,
 )
 for _page in PAGES:
     add_texts(_page.__name__, _page.EN, _page.DE)

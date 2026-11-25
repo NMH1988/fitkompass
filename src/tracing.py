@@ -30,6 +30,10 @@ that is tracing on, the owner's demo flag on and demo mode on (synthetic users, 
 lets a payload through as it is (an error keeps only its class name, as in T9.33's experiments),
 into a project of its own (`config.LANGSMITH_DEMO_PROJECT`).
 The gate is checked on every payload, and any doubt, or turning tracing off, masks it again.
+
+The drafts from a photo or a voice note (T11.10) are never traced, masked or not: the file, its
+description or transcript must reach no trace, the demo's unmasked ones included, so their runs go
+inside `untraced()`, which turns tracing off for the calls made in it and nothing else.
 """
 
 import hashlib
@@ -37,7 +41,8 @@ import os
 import re
 import threading
 import uuid
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import cache
 from typing import Any
@@ -392,6 +397,16 @@ def configure_tracing() -> bool:
         project = config.LANGSMITH_DEMO_PROJECT if demo else config.LANGSMITH_PROJECT
         langsmith.configure(enabled=True, project_name=project)
         return True
+
+
+@contextmanager
+def untraced() -> Iterator[None]:
+    """Run the block with tracing off for its own LangChain and LangGraph runs only (T11.10)."""
+    # LangSmith keeps this in a context variable, which LangGraph copies into the threads that run
+    # a graph's nodes; other sessions' runs, in their own threads, are not touched. It can only
+    # turn tracing off: nothing here sends a run anywhere.
+    with langsmith.tracing_context(enabled=False):
+        yield
 
 
 def run_metadata(turn_id: str, prompts: Mapping[str, str] | None = None) -> dict[str, str]:

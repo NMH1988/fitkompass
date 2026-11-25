@@ -3,8 +3,14 @@
 # All model calls go through OpenRouter's OpenAI-compatible API (docs/ARCHITECTURE.md, D3).
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
-# The chat models the app may use: the Sprint 1 list, reused by choice (docs/ARCHITECTURE.md).
-ALLOWED_MODELS: tuple[str, ...] = ("openai/gpt-5-mini", "openai/gpt-5-nano", "openai/gpt-5")
+# The chat models the app may use: the Sprint 1 list, reused by choice (docs/ARCHITECTURE.md), and
+# OpenAI's audio model, which only transcribes a voice note (T11.10, config.VOICE_MODEL).
+ALLOWED_MODELS: tuple[str, ...] = (
+    "openai/gpt-5-mini",
+    "openai/gpt-5-nano",
+    "openai/gpt-5",
+    "openai/gpt-audio-mini",
+)
 # Writes the answers and calls the tools.
 DEFAULT_ANSWER_MODEL = "openai/gpt-5-mini"
 # Rewrites the question for retrieval; a simple task, so the cheapest model (D6).
