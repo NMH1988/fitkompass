@@ -842,3 +842,29 @@ def test_the_search_off_line_names_preferences_too(language):
 def test_the_character_cap_fits_the_longest_message_escaped():
     """One message of the longest length, all escaped to five characters, still fits the cap."""
     assert config.THREAD_CHARS_TO_MODEL >= 5 * config.MESSAGE_MAX_CHARS
+
+
+def test_the_owner_s_coach_part_names_the_thread_tool_and_its_fields():
+    """O21's thread part names the tool, its fields and the tools a thread chat goes without."""
+    from src.agent import search
+
+    text = (config.PROJECT_ROOT / "src" / "prompts" / "answer_coach.md").read_text(encoding="utf-8")
+    expected = [
+        f"`{THREAD_TOOL}`",
+        "`week_of`",
+        "`side`",
+        "`today`",
+        "`week_start`",
+        "`week_end`",
+        "`older_not_shown`",
+        "`status: not_found`",
+        f"`{search.SEARCH_TOOL}`",
+        f"`{preferences.PREFERENCE_TOOL}`",
+    ]
+    assert [phrase for phrase in expected if phrase not in text] == []
+    # The fields it explains are the result's own, and the tool takes the arguments it names.
+    fields = set(client_thread.ThreadResult.model_fields)
+    assert {"today", "week_start", "week_end", "older_not_shown"} <= fields
+    assert set(client_thread.ThreadArgs.model_fields) == {"client", "week_of"}
+    assert "side" in client_thread.ThreadMessage.model_fields
+    assert client_thread.not_available().status == "not_found"
