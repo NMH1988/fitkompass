@@ -191,7 +191,7 @@ Deadline: **2026-11-02** (Sprint 2, already submitted by the owner, 2026-10-28).
 | [T11.4a](tickets/T11.4a.md) | NMH1988/fitkompass#10 | Real-time messages, part 1: the chat server and its signed token | M | T11.3 | 11-25 | done |
 | [T11.17](tickets/T11.17.md) | NMH1988/fitkompass#37 | A saved profile before redeeming a coach's invitation code | S | T11.7 (order only) | 11-25 | done |
 | [T11.4b](tickets/T11.4b.md) | NMH1988/fitkompass#11 | Real-time messages, part 2: the browser component, the Messages page and one launch command | M | T11.4a | 11-27 | done |
-| [T11.5](tickets/T11.5.md) | NMH1988/fitkompass#12 | Draft log entries from a gymer's messages, approved by the gymer, with Art. 9 consent | L | T11.3, T11.4b, O19 | 11-29 | in review |
+| [T11.5](tickets/T11.5.md) | NMH1988/fitkompass#12 | Draft log entries from a gymer's messages, approved by the gymer, with Art. 9 consent | L | T11.3, T11.4b, O19 | 11-29 | done |
 | [T11.6](tickets/T11.6.md) | NMH1988/fitkompass#13 | The client's thread in the coach's AI chat, and reply drafts | M | T11.5, O21 | 12-01 | todo |
 | [T11.7](tickets/T11.7.md) | NMH1988/fitkompass#14 | The coach's meal plan for a client | M | T11.3 (order only) | 12-03 | done |
 | [T11.8](tickets/T11.8.md) | NMH1988/fitkompass#15 | The coach's recipe library and the clients' ratings | M | T11.7 (order only) | 12-05 | done |
