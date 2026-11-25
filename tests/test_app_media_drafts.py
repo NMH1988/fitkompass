@@ -167,6 +167,32 @@ def test_the_camera_opens_only_once_chosen_and_under_the_warning(
     assert warning in texts(at)
 
 
+@pytest.mark.parametrize(
+    ("language", "staged", "synthetic"),
+    [
+        ("en", "staged meal", "synthetic recording"),
+        ("de", "gestellte Mahlzeit", "synthetische Aufnahme"),
+    ],
+)
+def test_each_source_asks_for_staged_photos_and_synthetic_recordings(
+    monkeypatch, gymer, fakes, language, staged, synthetic
+):
+    """While the app holds made-up data: the page and each widget's help say what to send."""
+    _consent()
+    at = _today(monkeypatch, language)
+    page = texts(at)
+    assert staged in page and synthetic in page
+    for source, kind, needle in (
+        ("upload", "file_uploader", staged),
+        ("camera", "camera_input", staged),
+        ("voice", "audio_input", synthetic),
+    ):
+        _source(at).set_value(source)
+        at.run(timeout=30)
+        [widget] = _widgets(at, kind)
+        assert needle in widget.proto.help, (source, language)
+
+
 def test_the_upload_takes_only_jpg_and_png_up_to_the_limit(monkeypatch, gymer, fakes):
     """The uploader names the types and the size limit from config."""
     _consent()

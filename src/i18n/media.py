@@ -40,6 +40,18 @@ EN: dict[str, str] = {
         "The whole file goes to OpenRouter and {provider} before the app can check it: keep other "
         "people, documents and labels out of the photo, and record only your own voice."
     ),
+    "media.made_up": (
+        "While the app holds made-up data: photograph a staged meal with no one, no document and "
+        "no label in view, and play a prepared synthetic recording of made-up entries into the "
+        "microphone instead of speaking yourself."
+    ),
+    "media.made_up_photo": (
+        "While the app holds made-up data, photograph a staged meal with no one in view."
+    ),
+    "media.made_up_voice": (
+        "While the app holds made-up data, play a prepared synthetic recording of made-up entries "
+        "into the microphone instead of your own voice."
+    ),
     "media.upload": "Photo of your meal (JPG or PNG, at most {mb} MB)",
     "media.camera": "Photo of your meal",
     "media.voice": "Voice note (at most {seconds} seconds)",
@@ -124,6 +136,19 @@ DE: dict[str, str] = {
         "Die ganze Datei geht an OpenRouter und {provider}, bevor die App sie prüfen kann: Halten "
         "Sie andere Personen, Dokumente und Etiketten aus dem Foto heraus und nehmen Sie nur Ihre "
         "eigene Stimme auf."
+    ),
+    "media.made_up": (
+        "Solange die App erfundene Daten enthält: Fotografieren Sie eine gestellte Mahlzeit ohne "
+        "Personen, Dokumente und Etiketten im Bild, und spielen Sie statt Ihrer eigenen Stimme "
+        "eine vorbereitete synthetische Aufnahme erfundener Einträge in das Mikrofon ab."
+    ),
+    "media.made_up_photo": (
+        "Solange die App erfundene Daten enthält, fotografieren Sie eine gestellte Mahlzeit ohne "
+        "Personen im Bild."
+    ),
+    "media.made_up_voice": (
+        "Solange die App erfundene Daten enthält, spielen Sie statt Ihrer eigenen Stimme eine "
+        "vorbereitete synthetische Aufnahme erfundener Einträge in das Mikrofon ab."
     ),
     "media.upload": "Foto Ihrer Mahlzeit (JPG oder PNG, höchstens {mb} MB)",
     "media.camera": "Foto Ihrer Mahlzeit",

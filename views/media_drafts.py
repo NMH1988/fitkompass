@@ -221,6 +221,9 @@ def _chosen_file():
     # camera and the recorder alike.
     warning = t("media.keep_out", provider=media.model_provider())
     st.warning(warning, icon=":material/visibility_off:")
+    # While the app holds made-up data only, so is what a file shows or says: a staged meal, and a
+    # synthetic recording instead of a real voice (`docs/TESTING.md`).
+    st.caption(f":material/lock: {t('media.made_up')}")
     source = st.segmented_control(
         t("media.source"), SOURCES, format_func=label_of("media.source"), key=SOURCE_KEY
     )
@@ -230,18 +233,22 @@ def _chosen_file():
             t("media.upload", **_limits()),
             type=list(config.PHOTO_TYPES),
             max_upload_size=config.PHOTO_MAX_MB,
-            help=warning,
+            help=f"{warning} {t('media.made_up_photo')}",
             key=f"media_upload_{turn}",
         )
     elif source == "camera":
         # Drawn only once the gymer chose it, so the browser never asks for the camera on a page
         # load.
-        found = st.camera_input(t("media.camera"), help=warning, key=f"media_camera_{turn}")
+        found = st.camera_input(
+            t("media.camera"),
+            help=f"{warning} {t('media.made_up_photo')}",
+            key=f"media_camera_{turn}",
+        )
     elif source == "voice":
         found = st.audio_input(
             t("media.voice", **_limits()),
             sample_rate=config.VOICE_SAMPLE_RATE,
-            help=f"{t('media.voice_help')} {warning}",
+            help=f"{t('media.voice_help')} {warning} {t('media.made_up_voice')}",
             key=f"media_voice_{turn}",
         )
     else:
