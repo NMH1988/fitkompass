@@ -546,16 +546,6 @@ def round_refusal(calls: Sequence[ToolCall], position: int) -> str | None:
     return None
 
 
-def _round_reads_a_thread(calls: Sequence[ToolCall], offered: Mapping[str, object]) -> bool:
-    """Return True if the round runs a get_client_thread call (offered, within the limits)."""
-    if client_thread.THREAD_TOOL not in offered:
-        return False
-    return any(
-        call["name"] == client_thread.THREAD_TOOL and round_refusal(calls, place) is None
-        for place, call in enumerate(calls)
-    )
-
-
 def run_checked_call(request: ToolCallRequest, execute: Callable[..., Any]) -> Command:
     """Run one call of the ToolNode's round through the registry, within the round's limits."""
     # `execute` (LangChain's own tool.invoke()) is never used: it skips the argument check for
@@ -572,21 +562,23 @@ def run_checked_call(request: ToolCallRequest, execute: Callable[..., Any]) -> C
         raise RuntimeError("The tool call is not in the model's last reply.")
     refusal = round_refusal(calls, position)
     offered = _turn_tools(context, request.state.get("training_only", False))
-    if (
-        call["name"] == client_thread.THREAD_TOOL
-        and refusal is None
-        and (client_thread.THREAD_TOOL in offered)
-    ):
-        # Before it runs, so whatever it returns, the turn holds this client's thread (T11.6a).
-        context.thread_calls.add(client_thread.reference_of(call["args"]))
-    elif refusal is None and call["name"] == search.SEARCH_TOOL and context.thread_calls:
+    # A round that runs a thread call holds that thread from its first call on, whichever the
+    # ToolNode runs first (T11.6a): the search, the USDA API and a proposal in it are off.
+    for place, other in enumerate(calls):
+        if (
+            other["name"] == client_thread.THREAD_TOOL
+            and client_thread.THREAD_TOOL in offered
+            and round_refusal(calls, place) is None
+        ):
+            context.thread_calls.add(client_thread.reference_of(other["args"]))
+    if refusal is None and call["name"] == search.SEARCH_TOOL and context.thread_calls:
         # Not offered then; a call all the same is refused before its query goes anywhere.
         refusal = config.THREAD_SEARCH_OFF_MESSAGE
     elif (
         refusal is None
         and call["name"] == preferences.PREFERENCE_TOOL
         and context.coach is not None
-        and (context.thread_calls or _round_reads_a_thread(calls, offered))
+        and context.thread_calls
     ):
         # Not offered then either; a call all the same proposes nothing, and the coach reads
         # why (memory.refused.thread). A thread call of the same round counts too, whichever

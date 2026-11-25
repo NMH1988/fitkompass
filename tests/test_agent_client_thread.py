@@ -848,7 +848,9 @@ def test_the_owner_s_coach_part_names_the_thread_tool_and_its_fields():
     """O21's thread part names the tool, its fields and the tools a thread chat goes without."""
     from src.agent import search
 
-    text = (config.PROJECT_ROOT / "src" / "prompts" / "answer_coach.md").read_text(encoding="utf-8")
+    # The real file: this module's autouse fixture points ANSWER_COACH_PROMPT_PATH at a test one.
+    real = config.PROJECT_ROOT / "src" / "prompts" / "answer_coach.md"
+    text = real.read_text(encoding="utf-8")
     expected = [
         f"`{THREAD_TOOL}`",
         "`week_of`",
@@ -868,3 +870,72 @@ def test_the_owner_s_coach_part_names_the_thread_tool_and_its_fields():
     assert set(client_thread.ThreadArgs.model_fields) == {"client", "week_of"}
     assert "side" in client_thread.ThreadMessage.model_fields
     assert client_thread.not_available().status == "not_found"
+
+
+@pytest.mark.parametrize("search_first", [True, False], ids=["search first", "thread first"])
+def test_a_search_in_the_same_round_as_a_thread_call_is_refused_in_either_order(
+    store_conn, thread, index_path, search_first
+):
+    """The round's thread call holds the thread before any of its calls runs."""
+    from src.agent import search
+
+    _switch(store_conn, thread)
+    calls = [
+        (search.SEARCH_TOOL, {"query": "protein after training"}),
+        (THREAD_TOOL, {"client": "client-1"}),
+    ]
+    if not search_first:
+        calls.reverse()
+    result, _ = _turn(
+        index_path, _clients(), Conversation(), tool_reply(*calls), AIMessage("Done.")
+    )
+    assert result.searches == ()
+    refused = [run.result.message for run in result.tool_runs if run.name is None]
+    assert refused == [config.THREAD_SEARCH_OFF_MESSAGE]
+
+
+def test_a_food_lookup_before_a_thread_call_in_one_round_asks_no_api(
+    store_conn, thread, index_path
+):
+    """A food call written before the thread call of its round still reads the table only."""
+    from src.tools.registry import FOOD_TOOL
+
+    _switch(store_conn, thread)
+    api = _RecordingFoodSearch()
+    model = ScriptedChatModel(
+        replies=[
+            tool_reply(
+                (FOOD_TOOL, {"food": "CANARYFOOD same round", "grams": 100}),
+                (THREAD_TOOL, {"client": "client-1"}),
+            ),
+            AIMessage("Done."),
+        ],
+        search_first=False,
+    )
+    chat_turn(
+        "What did client-1 eat?",
+        guard.RateLimiter(),
+        open_index=lambda: open_fixture_index(index_path),
+        chat_model=lambda: model,
+        translation_model=lambda: ScriptedTranslator(),
+        user=PROFILE,
+        conversation=Conversation(),
+        clients=_clients(),
+        food_api=api,
+    )
+    assert api.names == []
+
+
+def test_a_week_with_more_messages_than_are_read_says_older_ones_are_not_shown(
+    store_conn, thread, monkeypatch
+):
+    """Past the read limit the result keeps the newest and tells the model older ones exist."""
+    monkeypatch.setattr(config, "THREAD_MESSAGES_TO_MODEL", 3)
+    _switch(store_conn, thread)  # the limit is in the use's text, so consent to that text
+    _sent(store_conn, thread, world.SHARED, "a third", "2026-10-28T19:00:00+00:00")
+    _sent(store_conn, thread, world.SHARED, "the newest", "2026-10-28T20:00:00+00:00")
+    message, run = _call(_clients(), {"client": "client-1"})
+    texts = [item.text for item in run.result.messages]
+    assert len(texts) == 3 and texts[-1] == "the newest"
+    assert run.result.older_not_shown >= 1
+    assert json.loads(message.content)["older_not_shown"] >= 1
