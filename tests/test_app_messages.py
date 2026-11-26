@@ -307,3 +307,13 @@ def test_the_name_in_the_heading_is_shown_as_text(monkeypatch):
     escaped = chat.escape_markdown("Mia _big_")
     assert escaped != "Mia _big_"
     assert any(escaped in str(item.value) for item in at.markdown)
+
+
+def test_a_name_like_a_web_address_in_the_heading_is_no_link(monkeypatch):
+    """A display name like a web address shows with its "www." broken, never as a link (T11.6a)."""
+    store_account("coach", "Coach Sam")
+    _user(GYMER, "gymer", "www.attacker.example")
+    _pair(USER_ID, GYMER)
+    at = _run(monkeypatch)
+    headings = [str(item.value) for item in at.markdown if "attacker" in str(item.value)]
+    assert headings and all("www.attacker" not in heading for heading in headings)

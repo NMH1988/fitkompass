@@ -5,23 +5,22 @@ from datetime import date
 
 import streamlit as st
 
-from src import chat, config, export_pdf
+from src import config, export_pdf
 from src.chat import TurnResult
 from src.tools import coach_clients
 from views import chat as chat_view
-from views import resources
+from views import resources, tables
 from views.text import lang, t
 
 
 def _named(result: TurnResult, names: dict[str, str] | None) -> TurnResult:
-    """Return a coach's turn with no link in its answer and each reference as a name (T9.17)."""
-    # names is None for a guest, whose answer stays as it is.
-    if result.kind != "answer" or names is None:
+    """Return a coach's turn whose answer shows each client reference as the name (T9.17)."""
+    # names is None outside a coach's chat (a guest, a gymer): the answer stays as it is.
+    if result.kind != "answer" or not names:
         return result
-    # A coach's chat may hold a client's messages (T11.6a): no URL in the PDF is a link either.
-    text = export_pdf.unlinked(result.text)
-    # Escaped as Markdown, which the PDF reads back as plain text (a name is a user's own text).
-    text = coach_clients.name_references(text, names, chat.escape_markdown)
+    # One escaped line with links broken, which the PDF reads back as plain text (a name is a
+    # user's own text); the PDF breaks every link in a coach's answer itself (unlink_answers).
+    text = coach_clients.name_references(result.text, names, tables.one_line)
     return replace(result, text=text)
 
 
@@ -45,7 +44,9 @@ def summary_download() -> None:
 
     def build() -> bytes:
         """Build the PDF from this run's session, in this run's language."""
-        return export_pdf.build_summary_pdf(turns, user, system, manifest, today, current)
+        return export_pdf.build_summary_pdf(
+            turns, user, system, manifest, today, current, unlink_answers=refs is not None
+        )
 
     empty = user is None and not turns
     st.download_button(

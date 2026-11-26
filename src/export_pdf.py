@@ -268,8 +268,9 @@ def _inline_markdown(text: str) -> str:
 
 def unlinked(text: str) -> str:
     """Return text with every place a PDF viewer would start a link broken by a word joiner."""
-    # For a coach's answers (views/export.py): a client's message could ask the model for a
-    # link; a guest's answers and the source lines keep their URLs as written.
+    # For a coach's answers (build_summary_pdf(unlink_answers=True)), on the decoded text: a
+    # client's message could ask the model for a link; a guest's answers and the source lines
+    # keep their URLs as written.
     return _VIEWER_LINK.sub(
         lambda found: (
             found.group(0) + WORD_JOINER if found.group(0) == ":" else WORD_JOINER + found.group(0)
@@ -319,10 +320,14 @@ def clean_answer(answer: str) -> list[tuple[str, int]]:
     return lines
 
 
-def _answer_flowables(answer: str) -> list[Flowable]:
+def _answer_flowables(answer: str, unlink: bool = False) -> list[Flowable]:
     """Return the cleaned answer as paragraphs, list items indented by level."""
     flowables: list[Flowable] = []
     for line, level in clean_answer(answer):
+        if unlink:
+            # On the text as the PDF shows it, after every escape, character reference and
+            # control character is decoded or dropped, so none of them can rebuild a link.
+            line = unlinked(_plain(line))
         if not line:
             continue
         if level:
@@ -583,7 +588,12 @@ def session_turns(messages: Sequence[Mapping]) -> tuple[tuple[str, TurnResult], 
 
 
 def _turn_flowables(
-    number: int, question: str, result: TurnResult, system: UnitSystem, lang: Language = "en"
+    number: int,
+    question: str,
+    result: TurnResult,
+    system: UnitSystem,
+    lang: Language = "en",
+    unlink: bool = False,
 ) -> list[Flowable]:
     """Return one turn: its question, then the answer with sources and tools, or its message."""
     flowables: list[Flowable] = [
@@ -597,7 +607,7 @@ def _turn_flowables(
         return flowables
     flowables.append(Paragraph(escape(i18n.t("pdf.answer", lang)), STYLES["h3"]))
     # The model's answer, in the language it was written in.
-    flowables += _answer_flowables(result.text)
+    flowables += _answer_flowables(result.text, unlink)
     if result.sources:
         flowables.append(Paragraph(escape(i18n.t("pdf.sources", lang)), STYLES["h3"]))
         for card in result.sources:
@@ -799,6 +809,7 @@ def _story(
     manifest: Mapping[str, Source],
     today: date,
     lang: Language = "en",
+    unlink_answers: bool = False,
 ) -> list[Flowable]:
     """Return the PDF's content in order: header, profile, targets, turns, credits."""
     story: list[Flowable] = [
@@ -825,7 +836,7 @@ def _story(
     if not turns:
         story.append(_para(i18n.t("pdf.no_turns", lang)))
     for number, (question, result) in enumerate(turns, start=1):
-        story += _turn_flowables(number, question, result, system, lang)
+        story += _turn_flowables(number, question, result, system, lang, unlink_answers)
     story += _credits(turns, targets, manifest, lang)
     return story
 
@@ -837,8 +848,11 @@ def build_summary_pdf(
     manifest: Mapping[str, Source] | None = None,
     today: date | None = None,
     lang: Language = "en",
+    unlink_answers: bool = False,
 ) -> bytes:
     """Build the session summary PDF in memory, in the UI's language; never writes a file."""
+    # unlink_answers: a coach's PDF (T11.6a), whose answers may word a client's message: no URL,
+    # "www." or e-mail address in an answer is one a PDF viewer would make a link.
     try:
         _register_fonts()
         buffer = io.BytesIO()
@@ -857,7 +871,9 @@ def build_summary_pdf(
             author="",
             subject="",
         )
-        story = _story(turns, user, system, manifest or {}, today or date.today(), lang)
+        story = _story(
+            turns, user, system, manifest or {}, today or date.today(), lang, unlink_answers
+        )
         footer = partial(_footer, lang=lang)
         doc.build(story, onFirstPage=footer, onLaterPages=footer)
     except Exception:
