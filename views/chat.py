@@ -90,15 +90,29 @@ def client_refs() -> coach_clients.ClientRefs | None:
     return kept[1]
 
 
+def breaks_links() -> bool:
+    """Return whether this chat is a coach's, whose answers are shown with links broken."""
+    # client_refs() keeps the key for a coach this run works out. A run that cannot (the store
+    # failed, or the account was deleted in another tab) reads as a guest's but still shows the
+    # coach's earlier answers, which may word a client's messages (T11.6a): the key the chat
+    # still holds keeps their links broken. Only new_chat() and clear_session() drop it, each
+    # with the answers.
+    client_refs()
+    return CLIENT_REFS_KEY in st.session_state
+
+
 def with_client_names(text: str) -> str:
     """Return the model's text with each client reference shown as the client's display name."""
-    refs = client_refs()
-    if refs is None:
+    if not breaks_links():
         return text
     # A coach's chat may hold a client's messages (T11.6a), text a third party wrote: no link,
     # image, autolink or LaTeX is shown, so a click or a load can never carry another client's
     # data to an outside host. Bold, lists and headings stay.
     text = tables.dollars(recipes.unlinked_markdown(text))
+    refs = client_refs()
+    if refs is None:
+        # The coach is not worked out in this run: the references stay, with no name.
+        return text
     # A display name is a user's own text: shown as written, never as Markdown or a link.
     return coach_clients.name_references(text, refs.names(), tables.one_line)
 

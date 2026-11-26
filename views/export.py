@@ -31,6 +31,8 @@ def summary_download() -> None:
     # is in the language chosen now (T7.2), bound here: the click may build it outside the run.
     refs = chat_view.client_refs()
     names = refs.names() if refs is not None else None
+    # A coach's chat, also in a run that cannot work the coach out (chat_view.breaks_links()).
+    unlink = chat_view.breaks_links()
     turns = tuple(
         (question, _named(result, names))
         for question, result in export_pdf.session_turns(st.session_state["messages"])
@@ -45,7 +47,7 @@ def summary_download() -> None:
     def build() -> bytes:
         """Build the PDF from this run's session, in this run's language."""
         return export_pdf.build_summary_pdf(
-            turns, user, system, manifest, today, current, unlink=refs is not None
+            turns, user, system, manifest, today, current, unlink=unlink
         )
 
     empty = user is None and not turns

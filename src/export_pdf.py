@@ -120,8 +120,15 @@ _BARE_URL = re.compile(r"https?://[^\s<>*`\x00]+")
 _SLOT = re.compile(r"\x00(\d+)\x00")
 # Where a PDF viewer finds a link in plain text: a scheme's "://", "www." and an e-mail's "@".
 # A word joiner (U+2060, invisible, in DejaVu Sans) breaks each, as on the page, so a URL in
-# a coach's answer stays readable but is no link a click follows (T11.6a).
-_VIEWER_LINK = re.compile(r"(?<=[A-Za-z]):(?=//)|(?<=www)\.|@", re.IGNORECASE)
+# a coach's answer stays readable but is no link a click follows (T11.6a). The check is wider
+# than a link: every colon before a slash, the first of two slashes, every dot after a "w" and
+# every "@", whatever stands before them, so no mark beside them and no line break inside a
+# scheme or a "www." keeps a link whole.
+_VIEWER_LINK = re.compile(r":(?=/)|/(?=/)|(?<=w)\.|@", re.IGNORECASE)
+# What the drawn text of a coach's PDF drops before the check: format characters (a soft
+# hyphen, a zero-width space) and the combining marks left after NFC composed the letters
+# (a grapheme joiner, a variation selector), so none of them hides a link start from it.
+_HIDDEN = frozenset({"Cf", "Mn", "Me"})
 WORD_JOINER = "\u2060"
 # True while a coach's PDF is built (build_summary_pdf(unlink=True)): _text() breaks links,
 # except in the app's own lines (_own_text()).
@@ -215,9 +222,11 @@ def _own_text() -> Iterator[None]:
         _UNLINK.reset(token)
 
 
-def _without_format(text: str) -> str:
-    """Return text without Unicode format characters (soft hyphen, zero-width ones)."""
-    return "".join(c for c in text if unicodedata.category(c) != "Cf")
+def _without_hidden(text: str) -> str:
+    """Return text composed (NFC) without format characters or combining marks left over."""
+    # NFC first, so a letter written with a combining mark ("a" and U+0308) keeps it as "ä".
+    composed = unicodedata.normalize("NFC", text)
+    return "".join(c for c in composed if unicodedata.category(c) not in _HIDDEN)
 
 
 def _text(text: str) -> str:
@@ -230,8 +239,9 @@ def _text(text: str) -> str:
     if _UNLINK.get():
         # On the text as drawn, after every escape and character reference was decoded, and
         # with format characters (a soft hyphen, which ReportLab drops when it draws, a
-        # zero-width space) gone first, so none of them can hide a link from the check.
-        plain = unlinked(_without_format(plain))
+        # zero-width space) and leftover combining marks gone first, so none of them can hide
+        # a link from the check.
+        plain = unlinked(_without_hidden(plain))
     shown = "".join(
         c if c in "\t\n" or (ord(c) <= BMP_LAST and ord(c) in known) else MISSING for c in plain
     )
@@ -302,7 +312,7 @@ def unlinked(text: str) -> str:
     # app's own source lines and credits keep their URLs as written.
     return _VIEWER_LINK.sub(
         lambda found: (
-            found.group(0) + WORD_JOINER if found.group(0) == ":" else WORD_JOINER + found.group(0)
+            found.group(0) + WORD_JOINER if found.group(0) in ":/" else WORD_JOINER + found.group(0)
         ),
         text,
     )

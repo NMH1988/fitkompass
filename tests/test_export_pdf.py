@@ -5,6 +5,7 @@ import dataclasses
 import io
 import os
 import re
+import unicodedata
 from datetime import date
 
 import pytest
@@ -1041,6 +1042,13 @@ LINK_FORMS = (
     "www.attacker.example",
     "x&#64;attacker.example",
     "[r](https://attacker.example/r)",
+    # A combining mark beside the colon or the dot: a grapheme joiner, a variation selector.
+    "https:\u034f//attacker.example/r",
+    "https\u034f://attacker.example/r",
+    "https:\ufe0f//attacker.example/r",
+    "www\u034f.attacker.example",
+    "www\ufe0f.attacker.example",
+    "x\u034f@attacker.example",
 )
 
 
@@ -1057,6 +1065,8 @@ def _drawn(result: chat.TurnResult, unlink: bool) -> str:
 
 def _no_link(text: str) -> None:
     """Assert the text holds no start of a link a PDF viewer would follow."""
+    # A combining mark is read as if absent, as a viewer may skip it when it looks for a link.
+    text = "".join(c for c in text if unicodedata.category(c) not in ("Mn", "Me"))
     for start in ("https://", "www.attacker", "x@attacker"):
         assert start not in text, start
 
@@ -1069,6 +1079,30 @@ def test_a_coachs_pdf_draws_no_link_in_any_encoded_form(form):
     assert "attacker" in drawn
     # The word joiners are drawn: no box for a missing glyph.
     assert export_pdf.MISSING not in drawn
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "see https:\n//attacker.example/r",
+        "see www.\nattacker.example",
+        "see ww\nw.attacker.example",
+    ],
+)
+def test_a_coachs_pdf_breaks_a_link_split_over_two_lines(answer):
+    """A scheme or a "www." split over two answer lines is broken on each line."""
+    drawn = _drawn(chat.TurnResult("answer", answer), unlink=True)
+    joined = re.sub(r"\s", "", drawn)
+    _no_link(joined)
+    assert "attacker" in joined
+
+
+def test_a_coachs_pdf_keeps_letters_and_readable_text():
+    """German letters, also one written with a combining mark, and plain words stay as written."""
+    answer = "Grüße an Jürgen: Schritt 1/2 now. Fertig."
+    decomposed = answer.replace("ü", "ü", 1)
+    drawn = _drawn(chat.TurnResult("answer", decomposed), unlink=True)
+    assert answer in drawn.replace(export_pdf.WORD_JOINER, "")
 
 
 def test_a_guests_pdf_keeps_its_urls():

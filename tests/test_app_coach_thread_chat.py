@@ -247,6 +247,35 @@ def test_a_normal_coach_answer_keeps_names_citations_bold_and_dollars(monkeypatc
     assert r"helps! \[S3\]" in shown
 
 
+def test_links_stay_broken_in_a_run_that_cannot_work_the_coach_out(monkeypatch):
+    """A store failure reads as a guest's run: the coach's answer and PDF still show no link."""
+    from src import account as accounts
+    from tests.fakes import pdf_text
+    from tests.test_app_export import _recorded_builds
+
+    at, _ = _coach(monkeypatch)
+    answer = "client-1 logged no day; see https://attacker.example/r?w=87.3"
+    model = ScriptedChatModel(
+        replies=[tool_reply((LIST_TOOL, {})), AIMessage(answer)], search_first=False
+    )
+    _use_model(monkeypatch, model)
+    at = _ask(at, "Who logged least?")
+
+    def unavailable(*_args, **_kwargs):
+        """Fail as a store that cannot be opened."""
+        raise accounts.StoreUnavailable
+
+    monkeypatch.setattr(accounts, "open_store", unavailable)
+    built = _recorded_builds(monkeypatch)
+    at = at.run(timeout=30)
+    assert at.session_state["store_unavailable"] is True
+    shown = "\n".join(str(item.value) for item in at.markdown if "logged no day" in item.value)
+    assert "attacker" in shown and "https://" not in shown
+    assert built, "the page drew no download button"
+    drawn = pdf_text(built[-1]())
+    assert "attacker" in drawn and "https://attacker" not in drawn
+
+
 def test_a_coachs_session_pdf_draws_no_link_from_an_answer(monkeypatch):
     """The page builds a coach's PDF with links broken: the wiring, not only the PDF code."""
     from tests.fakes import pdf_text
