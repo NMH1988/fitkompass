@@ -19,7 +19,9 @@ language it was written in.
 import html
 import io
 import re
+import unicodedata
 from collections.abc import Mapping, Sequence
+from contextvars import ContextVar
 from datetime import date
 from functools import cache, partial
 from xml.sax.saxutils import escape
@@ -120,6 +122,8 @@ _SLOT = re.compile(r"\x00(\d+)\x00")
 # a coach's answer stays readable but is no link a click follows (T11.6a).
 _VIEWER_LINK = re.compile(r"(?<=[A-Za-z]):(?=//)|(?<=www)\.|@", re.IGNORECASE)
 WORD_JOINER = "\u2060"
+# True while a coach's PDF is built (build_summary_pdf(unlink=True)): _text() breaks links.
+_UNLINK: ContextVar[bool] = ContextVar("pdf_unlink", default=False)
 _HEADING = re.compile(r"^\s{0,3}#{1,6}\s+")
 _QUOTE = re.compile(r"^\s*(?:>\s?)+")
 _RULE = re.compile(r"^\s*([-*_])(?:\s*\1){2,}\s*$")
@@ -196,15 +200,25 @@ def _font_characters() -> frozenset[int]:
     return frozenset.intersection(*(frozenset(face.charToGlyph) for face in faces))
 
 
+def _without_format(text: str) -> str:
+    """Return text without Unicode format characters (soft hyphen, zero-width ones)."""
+    return "".join(c for c in text if unicodedata.category(c) != "Cf")
+
+
 def _text(text: str) -> str:
     """Return text escaped for ReportLab's markup, so it shows exactly as written."""
     # A character outside the BMP (an emoji) or one the font lacks becomes U+FFFD: ReportLab 5.0.1
     # writes a broken text map for the first (5 hex digits, found with pypdf) and would draw an
     # empty box for the others.
     known = _font_characters()
+    plain = _plain(text)
+    if _UNLINK.get():
+        # On the text as drawn, after every escape and character reference was decoded, and
+        # with format characters (a soft hyphen, which ReportLab drops when it draws, a
+        # zero-width space) gone first, so none of them can hide a link from the check.
+        plain = unlinked(_without_format(plain))
     shown = "".join(
-        c if c in "\t\n" or (ord(c) <= BMP_LAST and ord(c) in known) else MISSING
-        for c in _plain(text)
+        c if c in "\t\n" or (ord(c) <= BMP_LAST and ord(c) in known) else MISSING for c in plain
     )
     return escape(shown)
 
@@ -268,9 +282,8 @@ def _inline_markdown(text: str) -> str:
 
 def unlinked(text: str) -> str:
     """Return text with every place a PDF viewer would start a link broken by a word joiner."""
-    # For a coach's answers (build_summary_pdf(unlink_answers=True)), on the decoded text: a
-    # client's message could ask the model for a link; a guest's answers and the source lines
-    # keep their URLs as written.
+    # For every text a coach's PDF draws (build_summary_pdf(unlink=True)): a client's message
+    # could ask the model for a link; a guest's PDF keeps its URLs as written.
     return _VIEWER_LINK.sub(
         lambda found: (
             found.group(0) + WORD_JOINER if found.group(0) == ":" else WORD_JOINER + found.group(0)
@@ -320,14 +333,10 @@ def clean_answer(answer: str) -> list[tuple[str, int]]:
     return lines
 
 
-def _answer_flowables(answer: str, unlink: bool = False) -> list[Flowable]:
+def _answer_flowables(answer: str) -> list[Flowable]:
     """Return the cleaned answer as paragraphs, list items indented by level."""
     flowables: list[Flowable] = []
     for line, level in clean_answer(answer):
-        if unlink:
-            # On the text as the PDF shows it, after every escape, character reference and
-            # control character is decoded or dropped, so none of them can rebuild a link.
-            line = unlinked(_plain(line))
         if not line:
             continue
         if level:
@@ -593,7 +602,6 @@ def _turn_flowables(
     result: TurnResult,
     system: UnitSystem,
     lang: Language = "en",
-    unlink: bool = False,
 ) -> list[Flowable]:
     """Return one turn: its question, then the answer with sources and tools, or its message."""
     flowables: list[Flowable] = [
@@ -607,7 +615,7 @@ def _turn_flowables(
         return flowables
     flowables.append(Paragraph(escape(i18n.t("pdf.answer", lang)), STYLES["h3"]))
     # The model's answer, in the language it was written in.
-    flowables += _answer_flowables(result.text, unlink)
+    flowables += _answer_flowables(result.text)
     if result.sources:
         flowables.append(Paragraph(escape(i18n.t("pdf.sources", lang)), STYLES["h3"]))
         for card in result.sources:
@@ -809,7 +817,6 @@ def _story(
     manifest: Mapping[str, Source],
     today: date,
     lang: Language = "en",
-    unlink_answers: bool = False,
 ) -> list[Flowable]:
     """Return the PDF's content in order: header, profile, targets, turns, credits."""
     story: list[Flowable] = [
@@ -836,7 +843,7 @@ def _story(
     if not turns:
         story.append(_para(i18n.t("pdf.no_turns", lang)))
     for number, (question, result) in enumerate(turns, start=1):
-        story += _turn_flowables(number, question, result, system, lang, unlink_answers)
+        story += _turn_flowables(number, question, result, system, lang)
     story += _credits(turns, targets, manifest, lang)
     return story
 
@@ -848,11 +855,12 @@ def build_summary_pdf(
     manifest: Mapping[str, Source] | None = None,
     today: date | None = None,
     lang: Language = "en",
-    unlink_answers: bool = False,
+    unlink: bool = False,
 ) -> bytes:
     """Build the session summary PDF in memory, in the UI's language; never writes a file."""
-    # unlink_answers: a coach's PDF (T11.6a), whose answers may word a client's message: no URL,
-    # "www." or e-mail address in an answer is one a PDF viewer would make a link.
+    # unlink: a coach's PDF (T11.6a), whose answers and tool results may word a client's
+    # message: no URL, "www." or e-mail address in any text drawn is one a viewer would link.
+    token = _UNLINK.set(unlink)
     try:
         _register_fonts()
         buffer = io.BytesIO()
@@ -871,13 +879,13 @@ def build_summary_pdf(
             author="",
             subject="",
         )
-        story = _story(
-            turns, user, system, manifest or {}, today or date.today(), lang, unlink_answers
-        )
+        story = _story(turns, user, system, manifest or {}, today or date.today(), lang)
         footer = partial(_footer, lang=lang)
         doc.build(story, onFirstPage=footer, onLaterPages=footer)
     except Exception:
         # `from None`: ReportLab's errors can quote the text being laid out (the user's question,
         # the answer), which must not reach a log or a traceback.
         raise PdfExportError("The session summary could not be built.") from None
+    finally:
+        _UNLINK.reset(token)
     return buffer.getvalue()

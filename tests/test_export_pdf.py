@@ -1032,36 +1032,50 @@ LINK_FORMS = (
     "https&colon;//attacker.example/r",
     "https\\://attacker.example/r",
     "https:\x01//attacker.example/r",
+    "https:&shy;//attacker.example/r",
+    "https:&#173;//attacker.example/r",
+    "https:\u00ad//attacker.example/r",
+    "https:\u200b//attacker.example/r",
     "www&#46;attacker.example",
+    "www\u00ad.attacker.example",
     "www.attacker.example",
     "x&#64;attacker.example",
     "[r](https://attacker.example/r)",
 )
 
 
-def _answer_lines(answer: str, unlink: bool) -> str:
-    """Return the text of an answer's paragraphs as the PDF lays them out."""
-    export_pdf._register_fonts()
-    return "\n".join(item.getPlainText() for item in export_pdf._answer_flowables(answer, unlink))
+def _drawn(result: chat.TurnResult, unlink: bool) -> str:
+    """Return the text a session PDF with this turn draws, as a PDF reader extracts it."""
+    return pdf_text(export_pdf.build_summary_pdf([("Q?", result)], None, "metric", unlink=unlink))
+
+
+def _no_link(text: str) -> None:
+    """Assert the text holds no start of a link a PDF viewer would follow."""
+    for start in ("https://", "www.attacker", "x@attacker"):
+        assert start not in text, start
 
 
 @pytest.mark.parametrize("form", LINK_FORMS)
-def test_a_coachs_pdf_answer_has_no_link_in_any_encoded_form(form):
-    """Decoded escapes, character references and control characters rebuild no link (T11.6a)."""
-    shown = _answer_lines(f"see {form} now", unlink=True)
-    for start in ("https://", "www.", "x@attacker"):
-        assert start not in shown
-    assert "attacker" in shown
+def test_a_coachs_pdf_draws_no_link_in_any_encoded_form(form):
+    """Escapes, references, control and format characters rebuild no link in the drawn text."""
+    drawn = _drawn(chat.TurnResult("answer", f"see {form} now"), unlink=True)
+    _no_link(drawn)
+    assert "attacker" in drawn
 
 
-def test_a_guests_pdf_answer_keeps_its_urls():
-    """Outside a coach's chat the answer's URLs are shown as written."""
-    shown = _answer_lines("see https://example.org/x and www.example.org", unlink=False)
-    assert "https://example.org/x" in shown and "www.example.org" in shown
+def test_a_guests_pdf_keeps_its_urls():
+    """Outside a coach's chat the answer's URLs are drawn as written."""
+    drawn = _drawn(chat.TurnResult("answer", "see https://example.org/x"), unlink=False)
+    assert "https://example.org/x" in drawn
 
 
-def test_a_coachs_pdf_is_built_with_its_answers_unlinked():
-    """build_summary_pdf(unlink_answers=True) builds a PDF."""
-    result = chat.TurnResult("answer", "see https://attacker.example/r")
-    pdf = export_pdf.build_summary_pdf([("Q?", result)], None, "metric", unlink_answers=True)
-    assert pdf.startswith(b"%PDF")
+def test_a_coachs_pdf_draws_no_link_in_a_meal_plan_food_name():
+    """A food name the model sent to the meal plan tool is drawn with its link broken."""
+    plan = meal_plan.evaluate_meal_plan(
+        [{"food": "https://attacker.example/r?w=87.3", "grams": 100}],
+        registry.macro_targets(PROFILE).targets,
+    )
+    run = ToolRun(registry.MEAL_PLAN_TOOL, plan.status, plan)
+    result = chat.TurnResult("answer", "Checked.", tool_runs=(run,))
+    _no_link(_drawn(result, unlink=True))
+    assert "https://attacker.example" in _drawn(result, unlink=False)
