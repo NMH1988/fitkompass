@@ -1087,12 +1087,14 @@ def test_a_coachs_pdf_draws_no_link_in_any_encoded_form(form):
         "see https:\n//attacker.example/r",
         "see www.\nattacker.example",
         "see ww\nw.attacker.example",
+        "see ww-\nw.attacker.example",
     ],
 )
 def test_a_coachs_pdf_breaks_a_link_split_over_two_lines(answer):
     """A scheme or a "www." split over two answer lines is broken on each line."""
     drawn = _drawn(chat.TurnResult("answer", answer), unlink=True)
-    joined = re.sub(r"\s", "", drawn)
+    # Joined as a viewer may join them, a hyphen at a line's end taken out.
+    joined = re.sub(r"-?\s", "", drawn)
     _no_link(joined)
     assert "attacker" in joined
 
@@ -1100,7 +1102,7 @@ def test_a_coachs_pdf_breaks_a_link_split_over_two_lines(answer):
 def test_a_coachs_pdf_keeps_letters_and_readable_text():
     """German letters, also one written with a combining mark, and plain words stay as written."""
     answer = "Grüße an Jürgen: Schritt 1/2 now. Fertig."
-    decomposed = answer.replace("ü", "ü", 1)
+    decomposed = answer.replace("ü", "u\u0308", 1)
     drawn = _drawn(chat.TurnResult("answer", decomposed), unlink=True)
     assert answer in drawn.replace(export_pdf.WORD_JOINER, "")
 
