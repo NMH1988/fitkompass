@@ -20,7 +20,8 @@ import html
 import io
 import re
 import unicodedata
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import date
 from functools import cache, partial
@@ -198,6 +199,19 @@ def _font_characters() -> frozenset[int]:
     _register_fonts()
     faces = (pdfmetrics.getFont(name).face for name in (FONT, BOLD_FONT))
     return frozenset.intersection(*(frozenset(face.charToGlyph) for face in faces))
+
+
+@contextmanager
+def _own_text() -> Iterator[None]:
+    """Draw the app's own lines inside the block with their links as written."""
+    # The source lines, corrections and credits come from the approved manifest and our texts,
+    # never from the model or a client: their DOI and licence links stay whole (copyright
+    # rule 6) also in a coach's PDF.
+    token = _UNLINK.set(False)
+    try:
+        yield
+    finally:
+        _UNLINK.reset(token)
 
 
 def _without_format(text: str) -> str:
@@ -618,13 +632,14 @@ def _turn_flowables(
     flowables += _answer_flowables(result.text)
     if result.sources:
         flowables.append(Paragraph(escape(i18n.t("pdf.sources", lang)), STYLES["h3"]))
-        for card in result.sources:
-            flowables.append(_para(_source_line(card, lang), "small"))
-            # A correction notice must be read with its article, as the app's card says.
-            for correction in card.corrections:
-                label = i18n.t(f"correction.{correction.relation}", lang)
-                line = f"{label}: {correction.title}. {correction.url}"
-                flowables.append(_para(line, "correction"))
+        with _own_text():
+            for card in result.sources:
+                flowables.append(_para(_source_line(card, lang), "small"))
+                # A correction notice must be read with its article, as the app's card says.
+                for correction in card.corrections:
+                    label = i18n.t(f"correction.{correction.relation}", lang)
+                    line = f"{label}: {correction.title}. {correction.url}"
+                    flowables.append(_para(line, "correction"))
     if result.tool_runs:
         flowables.append(Paragraph(escape(i18n.t("pdf.tool_results", lang)), STYLES["h3"]))
         for run in result.tool_runs:
@@ -844,7 +859,8 @@ def _story(
         story.append(_para(i18n.t("pdf.no_turns", lang)))
     for number, (question, result) in enumerate(turns, start=1):
         story += _turn_flowables(number, question, result, system, lang)
-    story += _credits(turns, targets, manifest, lang)
+    with _own_text():
+        story += _credits(turns, targets, manifest, lang)
     return story
 
 

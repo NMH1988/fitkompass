@@ -1044,9 +1044,15 @@ LINK_FORMS = (
 )
 
 
+def _before_credits(drawn: str) -> str:
+    """Return the drawn text before the credits, which are the app's own and keep their links."""
+    return drawn.split(i18n.t("pdf.credits", "en"))[0]
+
+
 def _drawn(result: chat.TurnResult, unlink: bool) -> str:
-    """Return the text a session PDF with this turn draws, as a PDF reader extracts it."""
-    return pdf_text(export_pdf.build_summary_pdf([("Q?", result)], None, "metric", unlink=unlink))
+    """Return the text a session PDF with this turn draws before its credits, as extracted."""
+    pdf = export_pdf.build_summary_pdf([("Q?", result)], None, "metric", unlink=unlink)
+    return _before_credits(pdf_text(pdf))
 
 
 def _no_link(text: str) -> None:
@@ -1061,6 +1067,8 @@ def test_a_coachs_pdf_draws_no_link_in_any_encoded_form(form):
     drawn = _drawn(chat.TurnResult("answer", f"see {form} now"), unlink=True)
     _no_link(drawn)
     assert "attacker" in drawn
+    # The word joiners are drawn: no box for a missing glyph.
+    assert export_pdf.MISSING not in drawn
 
 
 def test_a_guests_pdf_keeps_its_urls():
@@ -1079,3 +1087,28 @@ def test_a_coachs_pdf_draws_no_link_in_a_meal_plan_food_name():
     result = chat.TurnResult("answer", "Checked.", tool_runs=(run,))
     _no_link(_drawn(result, unlink=True))
     assert "https://attacker.example" in _drawn(result, unlink=False)
+
+
+def test_a_coachs_pdf_keeps_the_apps_own_source_and_licence_links_whole():
+    """The source line, its licence link and the credits are the app's own: links as written."""
+    result = _answer("Spread it over meals [S1]; see https://attacker.example/r", _card(HMB))
+    pdf = export_pdf.build_summary_pdf(
+        [("Q?", result)], None, "metric", MANIFEST, TODAY, unlink=True
+    )
+    drawn = pdf_text(pdf)
+    assert f"Licensed under {HMB.license} ({HMB.license_url})" in drawn
+    assert HMB.url in drawn
+    _no_link(_before_credits(drawn).replace(HMB.url, "").replace(HMB.license_url, ""))
+
+
+def test_a_build_that_fails_leaves_the_switch_off(monkeypatch):
+    """The unlink switch is reset when a coach's build raises, so a later build keeps its URLs."""
+
+    def broken(*_args, **_kwargs):
+        """Fail the way a layout error would."""
+        raise RuntimeError("layout failed")
+
+    monkeypatch.setattr(export_pdf, "_story", broken)
+    with pytest.raises(export_pdf.PdfExportError):
+        export_pdf.build_summary_pdf([], None, "metric", unlink=True)
+    assert export_pdf._UNLINK.get() is False
