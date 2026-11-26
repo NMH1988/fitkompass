@@ -123,7 +123,8 @@ _SLOT = re.compile(r"\x00(\d+)\x00")
 # a coach's answer stays readable but is no link a click follows (T11.6a).
 _VIEWER_LINK = re.compile(r"(?<=[A-Za-z]):(?=//)|(?<=www)\.|@", re.IGNORECASE)
 WORD_JOINER = "\u2060"
-# True while a coach's PDF is built (build_summary_pdf(unlink=True)): _text() breaks links.
+# True while a coach's PDF is built (build_summary_pdf(unlink=True)): _text() breaks links,
+# except in the app's own lines (_own_text()).
 _UNLINK: ContextVar[bool] = ContextVar("pdf_unlink", default=False)
 _HEADING = re.compile(r"^\s{0,3}#{1,6}\s+")
 _QUOTE = re.compile(r"^\s*(?:>\s?)+")
@@ -296,8 +297,9 @@ def _inline_markdown(text: str) -> str:
 
 def unlinked(text: str) -> str:
     """Return text with every place a PDF viewer would start a link broken by a word joiner."""
-    # For every text a coach's PDF draws (build_summary_pdf(unlink=True)): a client's message
-    # could ask the model for a link; a guest's PDF keeps its URLs as written.
+    # For every text a coach's PDF draws that is not the app's own (build_summary_pdf(
+    # unlink=True)): a client's message could ask the model for a link; a guest's PDF and the
+    # app's own source lines and credits keep their URLs as written.
     return _VIEWER_LINK.sub(
         lambda found: (
             found.group(0) + WORD_JOINER if found.group(0) == ":" else WORD_JOINER + found.group(0)
@@ -875,7 +877,8 @@ def build_summary_pdf(
 ) -> bytes:
     """Build the session summary PDF in memory, in the UI's language; never writes a file."""
     # unlink: a coach's PDF (T11.6a), whose answers and tool results may word a client's
-    # message: no URL, "www." or e-mail address in any text drawn is one a viewer would link.
+    # message: no URL, "www." or e-mail address in them is one a viewer would link; the app's
+    # own source lines and credits keep their links (_own_text()).
     token = _UNLINK.set(unlink)
     try:
         _register_fonts()

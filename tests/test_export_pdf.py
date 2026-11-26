@@ -1097,7 +1097,8 @@ def test_a_coachs_pdf_keeps_the_apps_own_source_and_licence_links_whole():
     )
     drawn = pdf_text(pdf)
     assert f"Licensed under {HMB.license} ({HMB.license_url})" in drawn
-    assert HMB.url in drawn
+    # The cited article's URL on its source line in the turn, not only in the credits.
+    assert HMB.url in _before_credits(drawn)
     _no_link(_before_credits(drawn).replace(HMB.url, "").replace(HMB.license_url, ""))
 
 
