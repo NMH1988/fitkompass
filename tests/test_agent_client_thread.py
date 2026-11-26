@@ -939,3 +939,31 @@ def test_a_week_with_more_messages_than_are_read_says_older_ones_are_not_shown(
     assert len(texts) == 3 and texts[-1] == "the newest"
     assert run.result.older_not_shown >= 1
     assert json.loads(message.content)["older_not_shown"] >= 1
+
+
+def test_a_reused_call_id_keeps_every_client_it_read_in_the_check(
+    store_conn, relationships, thread, index_path, monkeypatch
+):
+    """Two thread reads under one call id: a client closed later still leaves the model's input."""
+    _switch(store_conn, thread)
+    _switch(store_conn, relationships[world.UNSHARED], gymer=world.UNSHARED)
+    refs = ClientRefs()
+    refs.reference_for(world.SHARED, NAME)
+    refs.reference_for(world.UNSHARED, "CANARYNAME Unshared")
+    # client-1 closes after the reads; client-2 stays open.
+    checks = iter([True])
+    monkeypatch.setattr(
+        client_thread,
+        "is_open",
+        lambda clients, reference, **_: reference != "client-1" or next(checks, False),
+    )
+    _, model = _turn(
+        index_path,
+        _clients(refs=refs),
+        Conversation(),
+        tool_reply((THREAD_TOOL, {"client": "client-1"})),  # id call-0
+        tool_reply((THREAD_TOOL, {"client": "client-2"})),  # id call-0 again
+        AIMessage("Done."),
+    )
+    assert CANARY in "\n".join(str(message.content) for message in model.calls[1])
+    assert CANARY not in "\n".join(str(message.content) for message in model.calls[2])

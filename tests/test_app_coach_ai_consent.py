@@ -170,3 +170,14 @@ def test_the_chat_use_says_any_week_the_pdf_and_that_the_checks_can_miss(
     for sentence in sentences:
         assert sentence in page
     assert "is not stored: it stays" not in page
+
+
+def test_a_coach_name_that_looks_like_a_web_address_is_no_link(monkeypatch):
+    """A coach named like a web address shows the name, its "www." broken, beside the switch."""
+    store_account("gymer", "Mia", profile=PROFILE)
+    _user(COACH, "coach", "www.attacker.example")
+    _pair(COACH, USER_ID)
+    at = _run(monkeypatch)
+    shown = "\n".join(str(item.value) for item in [*at.markdown, *at.caption])
+    assert "attacker" in shown
+    assert "www.attacker" not in shown

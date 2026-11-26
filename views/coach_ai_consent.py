@@ -11,10 +11,10 @@ consent any more (`ai_consents`) and the coach's AI reads nothing of it.
 import streamlit as st
 
 from src import account as accounts
-from src import chat, coach_thread
+from src import coach_thread
 from src.store import ai_consents
 from src.store.access import NotFound
-from views import account
+from views import account, tables
 from views.text import lang, t
 
 FLASH_KEY = "coach_ai_flash"
@@ -41,8 +41,9 @@ def _use(user_id: str, thread_id: int, coach: str, use: str, current: dict | Non
     """Show one use: its text, whether it is on, and its one-click switch."""
     on = current is not None and current["text_version"] == coach_thread.use_version(use)
     text_column, switch_column = st.columns([4, 1], vertical_alignment="center")
-    # The coach's name is a user's own text: escaped, so it never reads as Markdown or a link.
-    text_column.markdown(coach_thread.use_text(lang(), chat.escape_markdown(coach), use))
+    # The coach's name is a user's own text: one escaped line with links broken, so it never
+    # reads as Markdown, an autolink or a link.
+    text_column.markdown(coach_thread.use_text(lang(), tables.one_line(coach), use))
     state = t("coach_ai.on") if on else t("coach_ai.off")
     switch_column.caption(state)
     key = f"coach_ai_{use}_{thread_id}"
@@ -80,6 +81,6 @@ def section(user_id: str, thread: dict) -> None:
     if flash is not None:
         st.info(t(flash))
     coach = thread["other_name"]
-    st.caption(coach_thread.intro_text(lang(), chat.escape_markdown(coach)))
+    st.caption(coach_thread.intro_text(lang(), tables.one_line(coach)))
     for use in uses:
         _use(user_id, thread["id"], coach, use, current[use])

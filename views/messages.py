@@ -20,12 +20,12 @@ from pathlib import Path
 import streamlit as st
 
 from src import account as accounts
-from src import chat, config
+from src import config
 from src.realtime import page as realtime_page
 from src.realtime import server as realtime_server
 from src.store import messages, users
 from src.store.access import NotFound
-from views import account, coach_ai_consent, drafts, header
+from views import account, coach_ai_consent, drafts, header, tables
 from views.text import lang, t
 
 URL_PATH = "messages"
@@ -93,7 +93,8 @@ def _label(thread: dict) -> str:
 def _pick(threads: list[dict]) -> dict:
     """Return the thread to show: the picker's choice when there are several, else the only one."""
     if len(threads) == 1:
-        name = chat.escape_markdown(threads[0]["other_name"])
+        # One escaped line with links broken: a display name is a user's own text (T11.6a).
+        name = tables.one_line(threads[0]["other_name"])
         st.markdown(f"**{t('messages.with', name=name)}**")
         return threads[0]
     by_id = {thread["id"]: thread for thread in threads}

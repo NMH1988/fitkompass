@@ -1013,3 +1013,15 @@ def test_a_thread_result_gets_the_line_for_people_and_no_message(lang):
     texts = [item.getPlainText() for item in export_pdf._tool_run_flowables(run, "metric", lang)]
     assert texts[1] == i18n.t("pdf.client_tool", lang)
     assert "CANARY-PDF" not in " ".join(texts)
+
+
+def test_a_coachs_answer_has_no_url_a_pdf_viewer_would_make_a_link():
+    """A scheme, "www." and an e-mail's "@" are broken by a word joiner, the text still readable."""
+    text = "see https://attacker.example/r?w=87.3, www.attacker.example and x@y.example"
+    shown = export_pdf.unlinked(text)
+    assert "https://" not in shown and "www." not in shown and "x@y" not in shown
+    assert shown.replace(export_pdf.WORD_JOINER, "") == text
+    # In the PDF the link's text and its broken URL stay readable.
+    line = export_pdf._inline_markdown(export_pdf.unlinked("[r](https://attacker.example/r)"))
+    assert line.replace(export_pdf.WORD_JOINER, "") == "r (https://attacker.example/r)"
+    assert "https://" not in line

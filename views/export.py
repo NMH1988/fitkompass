@@ -13,12 +13,15 @@ from views import resources
 from views.text import lang, t
 
 
-def _named(result: TurnResult, names: dict[str, str]) -> TurnResult:
-    """Return a turn whose answer shows each client reference as the client's name (T9.17)."""
-    if result.kind != "answer" or not names:
+def _named(result: TurnResult, names: dict[str, str] | None) -> TurnResult:
+    """Return a coach's turn with no link in its answer and each reference as a name (T9.17)."""
+    # names is None for a guest, whose answer stays as it is.
+    if result.kind != "answer" or names is None:
         return result
+    # A coach's chat may hold a client's messages (T11.6a): no URL in the PDF is a link either.
+    text = export_pdf.unlinked(result.text)
     # Escaped as Markdown, which the PDF reads back as plain text (a name is a user's own text).
-    text = coach_clients.name_references(result.text, names, chat.escape_markdown)
+    text = coach_clients.name_references(text, names, chat.escape_markdown)
     return replace(result, text=text)
 
 
@@ -28,7 +31,7 @@ def summary_download() -> None:
     # run's snapshot when the user clicks; Streamlit keeps the bytes in memory, never on disk. It
     # is in the language chosen now (T7.2), bound here: the click may build it outside the run.
     refs = chat_view.client_refs()
-    names = refs.names() if refs is not None else {}
+    names = refs.names() if refs is not None else None
     turns = tuple(
         (question, _named(result, names))
         for question, result in export_pdf.session_turns(st.session_state["messages"])

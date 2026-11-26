@@ -115,6 +115,11 @@ _LINK = re.compile(r"\[([^\[\]]*)\]\(\s*<?([^()\s<>]*)>?(?:\s+\"[^\"]*\")?\s*\)"
 # A bare URL ends at a slot (NUL), so it cannot swallow a link set aside before it.
 _BARE_URL = re.compile(r"https?://[^\s<>*`\x00]+")
 _SLOT = re.compile(r"\x00(\d+)\x00")
+# Where a PDF viewer finds a link in plain text: a scheme's "://", "www." and an e-mail's "@".
+# A word joiner (U+2060, invisible, in DejaVu Sans) breaks each, as on the page, so a URL in
+# a coach's answer stays readable but is no link a click follows (T11.6a).
+_VIEWER_LINK = re.compile(r"(?<=[A-Za-z]):(?=//)|(?<=www)\.|@", re.IGNORECASE)
+WORD_JOINER = "\u2060"
 _HEADING = re.compile(r"^\s{0,3}#{1,6}\s+")
 _QUOTE = re.compile(r"^\s*(?:>\s?)+")
 _RULE = re.compile(r"^\s*([-*_])(?:\s*\1){2,}\s*$")
@@ -259,6 +264,18 @@ def _inline_markdown(text: str) -> str:
     text = _LINK.sub(lambda m: keep(link(m)), text)
     text = _BARE_URL.sub(lambda m: keep(html.unescape(m.group(0))), text)
     return restore(_emphasis_free(text))
+
+
+def unlinked(text: str) -> str:
+    """Return text with every place a PDF viewer would start a link broken by a word joiner."""
+    # For a coach's answers (views/export.py): a client's message could ask the model for a
+    # link; a guest's answers and the source lines keep their URLs as written.
+    return _VIEWER_LINK.sub(
+        lambda found: (
+            found.group(0) + WORD_JOINER if found.group(0) == ":" else WORD_JOINER + found.group(0)
+        ),
+        text,
+    )
 
 
 def _table_row(line: str) -> str | None:

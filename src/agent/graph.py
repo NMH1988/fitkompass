@@ -195,7 +195,8 @@ class TurnContext:
     # None for a guest, whose chat has no thread tool.
     thread_open: Callable[[str], bool] | None = None
     # This turn's thread results the model received: their tool call id and client reference.
-    thread_log: dict[str, str] = field(default_factory=dict)
+    # A set per id: a provider that reuses an id must not let a later read hide an earlier one.
+    thread_log: dict[str, set[str]] = field(default_factory=dict)
     # The client references of every thread the turn holds: each get_client_thread call's, any
     # result (a notice too, so nothing differs by what the client chose), and the marks of the
     # earlier turns it is given. While it holds any, the knowledge base search and the USDA API
@@ -353,13 +354,19 @@ def _notice(message: ToolMessage) -> ToolMessage:
     )
 
 
+def _closed_result(message: ToolMessage, context: TurnContext, closed: set[str]) -> bool:
+    """Return True if a thread result under this call id read any client now closed."""
+    return bool(context.thread_log.get(message.tool_call_id, set()) & closed)
+
+
 def visible_messages(state: TurnState, context: TurnContext) -> list[AnyMessage]:
     """Return the messages the model may receive now, with closed clients' threads left out."""
     messages = list(state["messages"])
     if context.thread_open is None:
         return messages
     marks = state.get("thread_marks", [])
-    refs = {ref for _, found in marks for ref in found} | set(context.thread_log.values())
+    logged = {ref for refs in context.thread_log.values() for ref in refs}
+    refs = {ref for _, found in marks for ref in found} | logged
     # Asked once per model call for each client, right before it (AC-50).
     closed = {ref for ref in refs if not context.thread_open(ref)}
     if not closed:
@@ -369,12 +376,7 @@ def visible_messages(state: TurnState, context: TurnContext) -> list[AnyMessage]
         message for message in messages if message.id is None or message.id not in hidden
     ]
     for place, message in enumerate(kept):
-        thread_ref = (
-            context.thread_log.get(message.tool_call_id)
-            if isinstance(message, ToolMessage)
-            else None
-        )
-        if thread_ref in closed:
+        if isinstance(message, ToolMessage) and _closed_result(message, context, closed):
             # Every model reply after a closed thread's result goes, with its tool results: its text
             # or a further call's arguments may quote the thread. The results of the same round
             # stay, as the reply that asked for them came before the thread.
@@ -382,8 +384,7 @@ def visible_messages(state: TurnState, context: TurnContext) -> list[AnyMessage]
             cut = next((at for at in later if isinstance(kept[at], AIMessage)), len(kept))
             round_results = [
                 _notice(other)
-                if isinstance(other, ToolMessage)
-                and context.thread_log.get(other.tool_call_id) in closed
+                if isinstance(other, ToolMessage) and _closed_result(other, context, closed)
                 else other
                 for other in kept[place + 1 : cut]
             ]
@@ -607,7 +608,7 @@ def run_checked_call(request: ToolCallRequest, execute: Callable[..., Any]) -> C
         message, run = registry.run_tool_call(offered, call)
         if isinstance(run.result, client_thread.ThreadResult):
             # Its messages reached the model: checked again before every later call (T11.6a).
-            context.thread_log[call["id"] or ""] = run.result.client
+            context.thread_log.setdefault(call["id"] or "", set()).add(run.result.client)
     if run is None:
         return Command(update={"messages": [message]})
     # Each run is reported as it ends, so a turn that fails later still logs it (T8.2).
@@ -673,7 +674,8 @@ def finish(state: TurnState, runtime: Runtime[TurnContext]) -> dict[str, Any]:
     pending: dict[str, Any] = {"proposal": proposals.texts[0]} if proposals.texts else {}
     # The clients whose thread the answer may hold (T11.6a): this turn's thread results and
     # every earlier turn's marks it was given, so an answer built on an earlier one keeps them.
-    threads = set(runtime.context.thread_calls) | set(runtime.context.thread_log.values())
+    logged = {ref for refs in runtime.context.thread_log.values() for ref in refs}
+    threads = set(runtime.context.thread_calls) | logged
     if threads:
         pending["threads"] = sorted(threads)
     if answer is None and (proposals.texts or proposals.refused) and not state.get("stopped"):
