@@ -694,5 +694,57 @@ BEGIN SELECT RAISE(ABORT, 'stored records are never changed in place'); END;
 PRAGMA user_version = 11;
 """
 
+# T11.6a (migration 12): consent (b) gets a switch per use (PRD "Consents (Art. 9)"): `use` names
+# what the gymer turned on ('chat', the coach's AI chat reading the thread; 'reply', reply drafts;
+# 'review' and 'foods' for later tickets), so declining one use leaves the others as they are. Each
+# use is a row of its own with the version of its text, so a use a later ticket adds changes only
+# its own text and the switches already set stay valid. `use` is set for (b) only. The table is
+# built again, as SQLite cannot add a table CHECK; every row is kept, and a (b) row from before
+# (no screen gave one) becomes the `chat` use with the version it had, which matches no text of
+# the use, so it still counts as no consent. Nothing refers to ai_consents, so the drop is safe.
+_V12 = """
+CREATE TABLE ai_consents_v12 (
+    id INTEGER PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users (id),
+    purpose TEXT NOT NULL
+        CHECK (purpose IN ('message_drafts', 'coach_thread', 'media', 'dish_suggestions',
+            'client_notes')),
+    relationship_id INTEGER REFERENCES coach_clients (id),
+    use TEXT CHECK (use IS NULL OR use IN ('chat', 'reply', 'review', 'foods')),
+    text_version TEXT NOT NULL
+        CHECK (length(text_version) = 12 AND text_version NOT GLOB '*[^0-9a-f]*'),
+    given_at TEXT NOT NULL
+        CHECK (given_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T*+00:00'
+            AND date(given_at) IS substr(given_at, 1, 10)),
+    withdrawn_at TEXT CHECK (
+        withdrawn_at IS NULL
+        OR withdrawn_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T*+00:00'
+            AND date(withdrawn_at) IS substr(withdrawn_at, 1, 10)
+    ),
+    CHECK ((purpose IN ('coach_thread', 'client_notes')) = (relationship_id IS NOT NULL)),
+    CHECK ((purpose = 'coach_thread') = (use IS NOT NULL))
+) STRICT;
+INSERT INTO ai_consents_v12
+    (id, user_id, purpose, relationship_id, use, text_version, given_at, withdrawn_at)
+SELECT id, user_id, purpose, relationship_id,
+    CASE WHEN purpose = 'coach_thread' THEN 'chat' END,
+    text_version, given_at, withdrawn_at
+FROM ai_consents;
+DROP TABLE ai_consents;
+ALTER TABLE ai_consents_v12 RENAME TO ai_consents;
+CREATE UNIQUE INDEX ai_consents_one_open
+    ON ai_consents (user_id, purpose, ifnull(relationship_id, 0), ifnull(use, ''))
+    WHERE withdrawn_at IS NULL;
+CREATE INDEX ai_consents_relationship ON ai_consents (relationship_id);
+CREATE TRIGGER ai_consents_only_withdrawn BEFORE UPDATE ON ai_consents
+WHEN OLD.withdrawn_at IS NOT NULL OR NEW.withdrawn_at IS NULL OR NEW.id IS NOT OLD.id
+    OR NEW.user_id IS NOT OLD.user_id OR NEW.purpose IS NOT OLD.purpose
+    OR NEW.relationship_id IS NOT OLD.relationship_id OR NEW.use IS NOT OLD.use
+    OR NEW.text_version IS NOT OLD.text_version OR NEW.given_at IS NOT OLD.given_at
+BEGIN SELECT RAISE(ABORT, 'a consent only changes when it is withdrawn'); END;
+
+PRAGMA user_version = 12;
+"""
+
 # In order: MIGRATIONS[0] creates version 1, MIGRATIONS[1] takes it to version 2, and so on.
-MIGRATIONS: tuple[str, ...] = (_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10, _V11)
+MIGRATIONS: tuple[str, ...] = (_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10, _V11, _V12)

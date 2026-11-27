@@ -148,6 +148,16 @@ NEW_NAMES = frozenset(
         "DRAFT_MAX_SET_GROUPS",
         "DRAFT_MAX_SETS_PER_GROUP",
         "DRAFT_MAX_STEPS",
+        # T11.6a: the coach's AI reads a client's thread.
+        "THREAD_MESSAGES_TO_MODEL",
+        "COACH_CHAT_PROVIDERS",
+        "THREAD_NOT_AVAILABLE_MESSAGE",
+        "THREAD_SEARCH_OFF_MESSAGE",
+        "SEARCH_OFF_MESSAGE",
+        "THREAD_CHARS_TO_MODEL",
+        "THREAD_NO_PREFERENCE_MESSAGE",
+        "MAX_THREAD_CALLS_PER_ROUND",
+        "TOO_MANY_THREAD_CALLS_MESSAGE",
         # T11.10: a photo or a voice note to draft log entries.
         "PHOTO_MODEL",
         "VOICE_MODEL",

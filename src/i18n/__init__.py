@@ -13,6 +13,7 @@ AC-5).
 from src.i18n import (
     account,
     chat,
+    coach_thread,
     dashboards,
     drafts,
     food,
@@ -50,6 +51,7 @@ PAGES = (
     account,
     thread,
     drafts,
+    coach_thread,
     media,
 )
 for _page in PAGES:

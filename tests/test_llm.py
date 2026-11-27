@@ -678,3 +678,19 @@ def test_the_page_and_the_workflow_build_the_draft_client_one_way(monkeypatch):
         resources.draft_model.clear()
     context = workflow.DraftContext(store_path=config.STORE_PATH, prompt=None)
     assert context.chat_model() is built
+
+
+def test_the_app_s_coach_chat_client_is_pinned():
+    """coach_thread.build_chat_model() sends consent (b)'s provider pin, the model and its cap."""
+    from src import coach_thread
+
+    server = Recorder(body=CHAT_OK)
+    client = coach_thread.build_chat_model(api_key=FAKE_KEY, http_client=server.client())
+    client.invoke("Hi")
+    body = server.last_json()
+    assert body["provider"] == {
+        "only": list(config.COACH_CHAT_PROVIDERS),
+        "allow_fallbacks": False,
+    }
+    assert body["model"] == config.DEFAULT_ANSWER_MODEL
+    assert body["max_completion_tokens"] == config.DEFAULT_MAX_TOKENS

@@ -12,12 +12,20 @@ A thread read is not audited: both readers are parties to the conversation, and 
 every message pushed to an open page would flood the log (a recorded exception to "every coach read
 is audited", `.claude/rules/security-privacy.md`). A message is never changed in place and is never
 sent to a model here; its text is never logged, and an error names the field, never the value.
+
+The coach's AI reads a thread for the coach (T11.6a, D30) only through `thread_for_coach_ai()`: the
+coach's newest relationship with the client must be active and the client's consent (b) must have
+that use switched on under its current text, both checked in the same transaction as the read, else
+the same `NotFound`; `is_open_for_coach_ai()` makes the same check without reading a message, right
+before each model call. Like a person's read, the AI's read writes no audit row (T11.6a); what
+the model may then receive is the caller's (`src/tools/client_thread.py`).
 """
 
 import sqlite3
+from datetime import datetime
 
 from src import config
-from src.store import values
+from src.store import ai_consents, values
 from src.store.access import NotFound, role_of
 from src.store.db import transaction
 
@@ -30,6 +38,15 @@ INSERT INTO messages (relationship_id, sender_id, text, created_at) VALUES (?, ?
 _THREAD = """
 SELECT id, relationship_id, sender_id, text, created_at FROM messages
 WHERE relationship_id = ? AND id > ? ORDER BY id LIMIT ?
+"""
+# The coach's newest relationship with a client: the one an AI read may use, if it is still active.
+_NEWEST_PAIR = """
+SELECT id, ended_at FROM coach_clients WHERE coach_id = ? AND client_id = ? ORDER BY id DESC LIMIT 1
+"""
+# A thread's messages sent in [start, end), the newest LIMIT of them, newest first.
+_WINDOW = """
+SELECT id, sender_id, text, created_at FROM messages
+WHERE relationship_id = ? AND created_at >= ? AND created_at < ? ORDER BY id DESC LIMIT ?
 """
 
 
@@ -77,3 +94,59 @@ def list_messages(
     with transaction(conn):
         _thread_side(conn, reader_id, relationship_id)
         return [dict(row) for row in conn.execute(_THREAD, (relationship_id, after_id, bound))]
+
+
+def _ai_thread(
+    conn: sqlite3.Connection, coach_id: object, client_id: object, use: object, version: object
+) -> int:
+    """Return the relationship an AI read for the coach may use, inside the caller's transaction."""
+    # NotFound for a malformed or unknown user, a coach who is not the client's, an ended
+    # relationship (read as a value), or no consent (b) with this use under this text's version.
+    try:
+        values.user_id(coach_id)
+        values.user_id(client_id)
+    except values.StoreValueError:
+        raise NotFound from None
+    if role_of(conn, coach_id) != "coach" or role_of(conn, client_id) != "gymer":
+        raise NotFound
+    relationship = conn.execute(_NEWEST_PAIR, (coach_id, client_id)).fetchone()
+    if relationship is None or relationship["ended_at"] is not None:
+        raise NotFound
+    row = ai_consents._open_row(conn, client_id, ai_consents.WITH_USES, relationship["id"], use)
+    if row is None or row["text_version"] != version:
+        raise NotFound
+    return relationship["id"]
+
+
+def is_open_for_coach_ai(
+    conn: sqlite3.Connection, coach_id: object, client_id: object, use: object, version: object
+) -> bool:
+    """Return whether the coach's AI may read the thread now: active, and the use switched on."""
+    try:
+        with transaction(conn):
+            _ai_thread(conn, coach_id, client_id, use, version)
+    except NotFound, values.StoreValueError:
+        return False
+    return True
+
+
+def thread_for_coach_ai(
+    conn: sqlite3.Connection,
+    coach_id: str,
+    client_id: str,
+    use: str,
+    version: str,
+    *,
+    start: datetime,
+    end: datetime,
+    limit: int,
+) -> list[dict]:
+    """Return the newest `limit` messages sent in [start, end), oldest first, for the coach's AI."""
+    # Only with the client's consent (b) for this use and an active relationship, checked in the
+    # read's own transaction; else NotFound. Both sides' messages, as the consent's text says.
+    bound = values.whole_number(limit, "limit", minimum=1)
+    first, last = values.utc_text(start), values.utc_text(end)
+    with transaction(conn):
+        relationship_id = _ai_thread(conn, coach_id, client_id, use, version)
+        rows = conn.execute(_WINDOW, (relationship_id, first, last, bound)).fetchall()
+    return [dict(row) for row in reversed(rows)]

@@ -19,12 +19,13 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 from langchain_core.tracers.langchain import wait_for_all_tracers
 from langsmith import utils as ls_utils
 
-from src import config, llm, observability, tracing
+from src import coach_thread, config, llm, observability, tracing
 from src.agent import search
 from src.agent.memory import Conversation
 from src.config import tracing_requested as real_tracing_requested
 from src.preferences import PreferenceCheck
-from src.tools import coach_clients, registry
+from src.store import ai_consents
+from src.tools import client_thread, coach_clients, registry
 from tests import store_world as world
 from tests import test_agent_clients as clients_tests
 from tests import test_agent_drafts as drafts_tests
@@ -981,6 +982,55 @@ def test_a_coach_s_client_tools_are_masked_in_a_trace(
     if not masked:
         # The check itself: with the mask off, the search finds every value both results hold.
         assert found == [pattern.pattern for pattern in CLIENT_VALUES]
+        return
+    assert found == []
+    for canary in CLIENT_CANARIES:
+        assert canary not in searched, canary
+
+
+# --- A client's thread in the coach's chat (T11.6a) ---------------------------------------------
+
+
+def test_the_thread_tool_name_is_kept():
+    """The thread tool keeps its name in a trace, like the other tools."""
+    assert tracing.mask({"name": client_thread.THREAD_TOOL}) == {"name": client_thread.THREAD_TOOL}
+
+
+@pytest.mark.parametrize("masked", [True, False])
+def test_a_turn_that_reads_a_thread_leaves_no_message_in_a_trace(
+    relationships, index_path, traced, monkeypatch, masked, store_conn
+):
+    """The thread's messages, both sides', and the answer quoting them never reach a trace."""
+    if not masked:
+        # The check itself: with the mask switched off, the same search finds the messages.
+        monkeypatch.setattr(tracing, "_mask_value", lambda value, key: value)
+    thread = relationships[world.SHARED]
+    version = coach_thread.use_version("chat")
+    ai_consents.give(store_conn, world.SHARED, "coach_thread", version, thread, "chat")
+    sent = "INSERT INTO messages (relationship_id, sender_id, text, created_at) VALUES (?, ?, ?, ?)"
+    store_conn.execute(
+        sent, (thread, world.SHARED, "CANARYMSG client", "2026-10-27T07:00:00+00:00")
+    )
+    store_conn.execute(
+        sent, (thread, world.COACH_A, "CANARYMSG coach", "2026-10-27T08:00:00+00:00")
+    )
+    clients = clients_tests._clients()
+    result, _ = clients_tests._turn(
+        index_path,
+        clients,
+        tool_reply((coach_clients.LIST_TOOL, {})),
+        tool_reply((client_thread.THREAD_TOOL, {"client": "client-1"})),
+        AIMessage("client-1 wrote CANARYANSWER about breakfast."),
+        question="Summarise client-1's messages.",
+    )
+    assert [(run.name, run.status) for run in result.tool_runs][-1] == (
+        client_thread.THREAD_TOOL,
+        "ok",
+    )
+    searched = _searched(traced.runs())
+    found = [canary for canary in ("CANARYMSG", "CANARYANSWER") if canary in searched]
+    if not masked:
+        assert found == ["CANARYMSG", "CANARYANSWER"]
         return
     assert found == []
     for canary in CLIENT_CANARIES:

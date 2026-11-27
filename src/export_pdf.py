@@ -19,7 +19,10 @@ language it was written in.
 import html
 import io
 import re
-from collections.abc import Mapping, Sequence
+import unicodedata
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import date
 from functools import cache, partial
 from xml.sax.saxutils import escape
@@ -50,6 +53,7 @@ from src.rag.sources import (
     Source,
 )
 from src.tools import coach_clients, meal_plan, registry
+from src.tools.client_thread import ThreadResult
 from src.tools.energy import FORMULA_SOURCES, MACRO_SOURCES, FormulaSource, Macro, TdeeResult
 from src.tools.food import FoodLookupResult, FoodTableError, food_source_line, read_usda_release
 from src.tools.meal_plan import MealPlanResult
@@ -114,6 +118,21 @@ _LINK = re.compile(r"\[([^\[\]]*)\]\(\s*<?([^()\s<>]*)>?(?:\s+\"[^\"]*\")?\s*\)"
 # A bare URL ends at a slot (NUL), so it cannot swallow a link set aside before it.
 _BARE_URL = re.compile(r"https?://[^\s<>*`\x00]+")
 _SLOT = re.compile(r"\x00(\d+)\x00")
+# Where a PDF viewer finds a link in plain text: a scheme's "://", "www." and an e-mail's "@".
+# A word joiner (U+2060, invisible, in DejaVu Sans) breaks each, as on the page, so a URL in
+# a coach's answer stays readable but is no link a click follows (T11.6a). The check is wider
+# than a link: every colon before a slash, the first of two slashes, every dot after a "w" and
+# every "@", whatever stands before them, so no mark beside them and no line break inside a
+# scheme or a "www." keeps a link whole.
+_VIEWER_LINK = re.compile(r":(?=/)|/(?=/)|(?<=w)\.|@", re.IGNORECASE)
+# What the drawn text of a coach's PDF drops before the check: format characters (a soft
+# hyphen, a zero-width space) and the combining marks left after NFC composed the letters
+# (a grapheme joiner, a variation selector), so none of them hides a link start from it.
+_HIDDEN = frozenset({"Cf", "Mn", "Me"})
+WORD_JOINER = "\u2060"
+# True while a coach's PDF is built (build_summary_pdf(unlink=True)): _text() breaks links,
+# except in the app's own lines (_own_text()).
+_UNLINK: ContextVar[bool] = ContextVar("pdf_unlink", default=False)
 _HEADING = re.compile(r"^\s{0,3}#{1,6}\s+")
 _QUOTE = re.compile(r"^\s*(?:>\s?)+")
 _RULE = re.compile(r"^\s*([-*_])(?:\s*\1){2,}\s*$")
@@ -190,15 +209,41 @@ def _font_characters() -> frozenset[int]:
     return frozenset.intersection(*(frozenset(face.charToGlyph) for face in faces))
 
 
+@contextmanager
+def _own_text() -> Iterator[None]:
+    """Draw the app's own lines inside the block with their links as written."""
+    # The source lines, corrections and credits come from the approved manifest and our texts,
+    # never from the model or a client: their DOI and licence links stay whole (copyright
+    # rule 6) also in a coach's PDF.
+    token = _UNLINK.set(False)
+    try:
+        yield
+    finally:
+        _UNLINK.reset(token)
+
+
+def _without_hidden(text: str) -> str:
+    """Return text composed (NFC) without format characters or combining marks left over."""
+    # NFC first, so a letter written with a combining mark ("a" and U+0308) keeps it as "ä".
+    composed = unicodedata.normalize("NFC", text)
+    return "".join(c for c in composed if unicodedata.category(c) not in _HIDDEN)
+
+
 def _text(text: str) -> str:
     """Return text escaped for ReportLab's markup, so it shows exactly as written."""
     # A character outside the BMP (an emoji) or one the font lacks becomes U+FFFD: ReportLab 5.0.1
     # writes a broken text map for the first (5 hex digits, found with pypdf) and would draw an
     # empty box for the others.
     known = _font_characters()
+    plain = _plain(text)
+    if _UNLINK.get():
+        # On the text as drawn, after every escape and character reference was decoded, and
+        # with format characters (a soft hyphen, which ReportLab drops when it draws, a
+        # zero-width space) and leftover combining marks gone first, so none of them can hide
+        # a link from the check.
+        plain = unlinked(_without_hidden(plain))
     shown = "".join(
-        c if c in "\t\n" or (ord(c) <= BMP_LAST and ord(c) in known) else MISSING
-        for c in _plain(text)
+        c if c in "\t\n" or (ord(c) <= BMP_LAST and ord(c) in known) else MISSING for c in plain
     )
     return escape(shown)
 
@@ -258,6 +303,19 @@ def _inline_markdown(text: str) -> str:
     text = _LINK.sub(lambda m: keep(link(m)), text)
     text = _BARE_URL.sub(lambda m: keep(html.unescape(m.group(0))), text)
     return restore(_emphasis_free(text))
+
+
+def unlinked(text: str) -> str:
+    """Return text with every place a PDF viewer would start a link broken by a word joiner."""
+    # For every text a coach's PDF draws that is not the app's own (build_summary_pdf(
+    # unlink=True)): a client's message could ask the model for a link; a guest's PDF and the
+    # app's own source lines and credits keep their URLs as written.
+    return _VIEWER_LINK.sub(
+        lambda found: (
+            found.group(0) + WORD_JOINER if found.group(0) in ":/" else WORD_JOINER + found.group(0)
+        ),
+        text,
+    )
 
 
 def _table_row(line: str) -> str | None:
@@ -527,9 +585,13 @@ def _tool_run_flowables(
         body = _food_flowables(result, lang)
     elif isinstance(result, MealPlanResult) and result.status != "invalid":
         body = _meal_plan_flowables(result, lang)
-    elif isinstance(result, coach_clients.ClientListResult | coach_clients.ClientWeekResult):
-        # A coach's client tools (T9.17): their table is in the app; the answer above names the
-        # clients, and the message written for the model is not repeated.
+    elif isinstance(
+        result,
+        coach_clients.ClientListResult | coach_clients.ClientWeekResult | ThreadResult,
+    ):
+        # A coach's client tools (T9.17) and a client's thread (T11.6a): their table is in the
+        # app, never in the PDF; the answer above names the clients, and the message written for
+        # the model is not repeated.
         body = [_para(i18n.t("pdf.client_tool", lang), "small")]
     else:
         # A refused or failed call: the fixed message, never what the model sent.
@@ -561,7 +623,11 @@ def session_turns(messages: Sequence[Mapping]) -> tuple[tuple[str, TurnResult], 
 
 
 def _turn_flowables(
-    number: int, question: str, result: TurnResult, system: UnitSystem, lang: Language = "en"
+    number: int,
+    question: str,
+    result: TurnResult,
+    system: UnitSystem,
+    lang: Language = "en",
 ) -> list[Flowable]:
     """Return one turn: its question, then the answer with sources and tools, or its message."""
     flowables: list[Flowable] = [
@@ -578,13 +644,14 @@ def _turn_flowables(
     flowables += _answer_flowables(result.text)
     if result.sources:
         flowables.append(Paragraph(escape(i18n.t("pdf.sources", lang)), STYLES["h3"]))
-        for card in result.sources:
-            flowables.append(_para(_source_line(card, lang), "small"))
-            # A correction notice must be read with its article, as the app's card says.
-            for correction in card.corrections:
-                label = i18n.t(f"correction.{correction.relation}", lang)
-                line = f"{label}: {correction.title}. {correction.url}"
-                flowables.append(_para(line, "correction"))
+        with _own_text():
+            for card in result.sources:
+                flowables.append(_para(_source_line(card, lang), "small"))
+                # A correction notice must be read with its article, as the app's card says.
+                for correction in card.corrections:
+                    label = i18n.t(f"correction.{correction.relation}", lang)
+                    line = f"{label}: {correction.title}. {correction.url}"
+                    flowables.append(_para(line, "correction"))
     if result.tool_runs:
         flowables.append(Paragraph(escape(i18n.t("pdf.tool_results", lang)), STYLES["h3"]))
         for run in result.tool_runs:
@@ -804,7 +871,8 @@ def _story(
         story.append(_para(i18n.t("pdf.no_turns", lang)))
     for number, (question, result) in enumerate(turns, start=1):
         story += _turn_flowables(number, question, result, system, lang)
-    story += _credits(turns, targets, manifest, lang)
+    with _own_text():
+        story += _credits(turns, targets, manifest, lang)
     return story
 
 
@@ -815,8 +883,13 @@ def build_summary_pdf(
     manifest: Mapping[str, Source] | None = None,
     today: date | None = None,
     lang: Language = "en",
+    unlink: bool = False,
 ) -> bytes:
     """Build the session summary PDF in memory, in the UI's language; never writes a file."""
+    # unlink: a coach's PDF (T11.6a), whose answers and tool results may word a client's
+    # message: no URL, "www." or e-mail address in them is one a viewer would link; the app's
+    # own source lines and credits keep their links (_own_text()).
+    token = _UNLINK.set(unlink)
     try:
         _register_fonts()
         buffer = io.BytesIO()
@@ -842,4 +915,6 @@ def build_summary_pdf(
         # `from None`: ReportLab's errors can quote the text being laid out (the user's question,
         # the answer), which must not reach a log or a traceback.
         raise PdfExportError("The session summary could not be built.") from None
+    finally:
+        _UNLINK.reset(token)
     return buffer.getvalue()

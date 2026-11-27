@@ -13,7 +13,7 @@ from src import chat, config, dashboard, exercises, i18n, metrics, units, usage
 from src.i18n import Language
 from src.profile import Goal
 from src.store.notifications import Notification
-from src.tools import coach_clients, registry
+from src.tools import client_thread, coach_clients, registry
 from src.tools.energy import Macro, MacroTargetsResult, TdeeResult
 from src.tools.food import FoodLookupResult
 
@@ -784,6 +784,22 @@ def client_list_tool_table(
         for item in result.clients
     ]
     return columns(column_names(CLIENT_TOOL_COLUMNS, lang), rows)
+
+
+def client_thread_tool_table(
+    result: client_thread.ThreadResult, lang: Language
+) -> dict[str, list[str]]:
+    """Return get_client_thread's messages as a table of plain text, oldest first (T11.6a)."""
+    sides = {
+        "client": i18n.t("coach_ai.from_client", lang),
+        "coach": i18n.t("coach_ai.from_coach", lang),
+    }
+    names = tuple(i18n.t(f"coach_ai.col_{name}", lang) for name in ("from", "day", "time", "text"))
+    rows = [
+        [sides[item.side], item.day.isoformat(), item.time_of_day, item.text]
+        for item in result.messages
+    ]
+    return columns(names, rows)
 
 
 def client_week_tool_rows(

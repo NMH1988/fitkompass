@@ -28,6 +28,8 @@ LOG_FAILED_EVENT = "log_failed"
 EVENTS = frozenset(
     {
         "turn",
+        # T11.6a: a thread check that could not read the store (it fails closed).
+        "thread_check_failed",
         "turn_error",
         "llm_error",
         "guard_rejected",

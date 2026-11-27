@@ -36,9 +36,11 @@ _MARKDOWN_LINK = re.compile(r"\[([^\[\]]*)\](?:\((?:[^()]|\([^()]*\))*\)|\[[^\[\
 # nested brackets) and an angle bracket (an autolink <https://...>, HTML), each escaped with a
 # backslash; and the bare links GitHub-flavoured Markdown turns into links whatever is escaped (a
 # scheme's "://", "www.", an e-mail's "@", checked in a browser on 2026-11-24), each broken by an
-# invisible word joiner. All in one pass, so it shows as typed and no escape is undone.
+# invisible word joiner; and "&", escaped too, as Markdown decodes a character reference
+# ("&#58;", "&period;", "&commat;") into the colon, dot or "@" of a link before it finds
+# links. All in one pass, so it shows as typed and no escape is undone.
 # "www" has no word boundary before it: GitHub-flavoured Markdown also links "_www." and the like.
-_LINK_SPECIAL = re.compile(r"[\\\[\]<>]|(?<=[A-Za-z]):(?=//)|(?<=www)\.|@", re.IGNORECASE)
+_LINK_SPECIAL = re.compile(r"[\\\[\]<>&]|(?<=[A-Za-z]):(?=//)|(?<=www)\.|@", re.IGNORECASE)
 WORD_JOINER = "⁠"
 
 
@@ -57,6 +59,14 @@ def steps_markdown(steps: str) -> str:
     without_images = _MARKDOWN_IMAGE.sub(lambda image: image.group(1), steps)
     without_links = _MARKDOWN_LINK.sub(lambda link: link.group(1), without_images)
     return _LINK_SPECIAL.sub(_neutralised, without_links)
+
+
+def unlinked_markdown(text: str) -> str:
+    """Return a model's Markdown with every image and link shown as plain text."""
+    # A model's answer keeps its own brackets (citations such as "[S1][S2]", also right after a
+    # "!"): they are escaped, which stops every image and link form, rather than collapsed as a
+    # coach's steps are.
+    return _LINK_SPECIAL.sub(_neutralised, text)
 
 
 def ingredient(
