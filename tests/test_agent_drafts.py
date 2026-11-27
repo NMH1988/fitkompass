@@ -1,6 +1,7 @@
 """Drafts of log entries from a gymer's own messages (T11.5, D26), with a scripted fake model."""
 
 import json
+from datetime import date
 
 import pytest
 from langchain_core.runnables import RunnableLambda
@@ -239,6 +240,19 @@ def test_an_unmatched_food_needs_a_pick_before_it_is_logged(store_conn, relation
     picked = {**result.cards[0], "food_name": CHICKEN}
     result = drafter.decide(_context(_model()), [{"action": "edit", "card": picked}])
     assert result.outcome == "done" and _meals(store_conn)[-1]["food_name"] == CHICKEN
+
+
+def test_boiled_eggs_get_no_kale_card_from_the_committed_table():
+    """The live check's "boiled eggs" gives a card with no food and the eggs to pick (T11.22)."""
+    entries = drafting.DraftEntries(
+        foods=[drafting.FoodEntry(food="boiled eggs", grams=None, meal="breakfast")],
+        weight=None,
+        workout=[],
+    )
+    cards, dropped = drafting.cards_from(entries, date(2026, 11, 26))
+    assert dropped == 0 and cards[0]["food_name"] is None
+    assert cards[0]["alternatives"]
+    assert all(name.startswith("Egg") for name in cards[0]["alternatives"])
 
 
 def test_entries_off_the_list_or_ranges_are_dropped_in_code(store_conn, relationships):

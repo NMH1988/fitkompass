@@ -169,6 +169,9 @@ NEW_NAMES = frozenset(
         "MEDIA_MAX_STEPS",
         "UPLOAD_MAX_MB",
         "UPLOAD_SPOOL_MAX_BYTES",
+        # T11.22: the food matcher's word check.
+        "FOOD_PREPARATION_WORDS",
+        "FOOD_QUALIFIER_WORDS",
     }
 )
 

@@ -21,6 +21,7 @@ Keep the entry short and record what the code does not say. `tests/test_docs_lay
 
 ---
 
+- [2026-11-27 · T11.22 The food matcher: no match on a word that is not the food · PR pending (closes NMH1988/fitkompass#53)](progress/2026-11-27-T11.22.md)
 - [2026-11-27 · T11.10 Records: status done after the merge · NMH1988/fitkompass#56 (closes NMH1988/fitkompass#55)](progress/2026-11-27-T11.10.md)
 - [2026-11-26 · T11.19 Plan: T11.19-T11.23, draft cards, a larger USDA table, foods the table lacks, the food matcher's bug, speech before the guard · NMH1988/fitkompass#52 (closes NMH1988/fitkompass#51)](progress/2026-11-26-T11.19.md)
 - [2026-11-25 · T11.10 A photo or a voice note to a draft log entry · NMH1988/fitkompass#46 (closes NMH1988/fitkompass#17)](progress/2026-11-25-T11.10.md)
