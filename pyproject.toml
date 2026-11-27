@@ -21,7 +21,7 @@ dependencies = [
     # pins. tests/test_dependency_licences.py checks them all.
     "fastapi==0.165.0",
     "uvicorn==0.54.0",
-    "langchain==1.4.6",
+    "langchain==1.5.2",
     "langchain-chroma==1.1.0",
     "langchain-openai==1.7.2",
     "langchain-text-splitters==1.1.3",
