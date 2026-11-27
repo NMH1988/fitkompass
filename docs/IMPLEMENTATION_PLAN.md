@@ -200,7 +200,7 @@ Deadline: **2026-11-02** (Sprint 2, already submitted by the owner, 2026-10-28).
 | [T11.7](tickets/T11.7.md) | NMH1988/fitkompass#14 | The coach's meal plan for a client | M | T11.3 (order only) | 12-03 | done |
 | [T11.8](tickets/T11.8.md) | NMH1988/fitkompass#15 | The coach's recipe library and the clients' ratings | M | T11.7 (order only) | 12-05 | done |
 | [T11.9](tickets/T11.9.md) | NMH1988/fitkompass#16 | Dish suggestions for a meal of the plan, with code checks, two pauses and a YouTube search button | L | T11.7, T11.8, O20 | 12-07 | todo |
-| [T11.10](tickets/T11.10.md) | NMH1988/fitkompass#17 | (P1) A photo or a voice note to a draft log entry | L | T11.5, O19 | 12-09 | in review |
+| [T11.10](tickets/T11.10.md) | NMH1988/fitkompass#17 | (P1) A photo or a voice note to a draft log entry | L | T11.5, O19 | 12-09 | done |
 | [T11.14](tickets/T11.14.md) | NMH1988/fitkompass#29 | (P1) The client's messages in the weekly review draft | M | T11.6, O25 | 12-10 | todo |
 | [T11.11](tickets/T11.11.md) | NMH1988/fitkompass#18 | (P1) The coach's own video link and a click counter | S | T11.4a, T11.8 | 12-11 | todo |
 | [T11.12](tickets/T11.12.md) | NMH1988/fitkompass#19 | Evaluation and user tests of the Capstone flows | M | T11.5, T11.9, O22, O23 | 12-13 | todo |
