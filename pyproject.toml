@@ -28,7 +28,7 @@ dependencies = [
     # The chat turn's StateGraph (T9.2); langgraph-prebuilt holds the ToolNode we import.
     "langgraph==1.2.17",
     # The InMemorySaver of the chat's short-term memory (T9.4).
-    "langgraph-checkpoint==4.3.0",
+    "langgraph-checkpoint==4.3.2",
     # The weekly review's SqliteSaver (T9.16, D12): a review waiting for the coach survives a
     # restart. MIT; it pulls in aiosqlite (MIT) and sqlite-vec (MIT or Apache-2.0), checked by
     # tests/test_dependency_licences.py.
