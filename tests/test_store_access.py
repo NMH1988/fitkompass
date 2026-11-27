@@ -161,6 +161,9 @@ WRITES = {
     # T11.5: the drafted mark of the gymer's own message, and with it the step's own entries.
     "drafts.mark_finished",
     "drafts.save_step",
+    # T11.10: the gymer's own entries drafted from a photo or a voice note (NotFound for anyone
+    # else, nothing written; tests/test_store_drafts.py).
+    "drafts.save_entries",
 }
 INTERNALS = {
     # No user data in or out: opening the file, checks, and the access layer itself.

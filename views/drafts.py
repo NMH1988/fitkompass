@@ -9,6 +9,7 @@ card of the message, then saves them in one step. Withdrawing the consent drops 
 at once. The run lives in this session only (`Drafter`), keyed by the acting user.
 """
 
+from collections.abc import Sequence
 from datetime import date
 
 import streamlit as st
@@ -331,23 +332,19 @@ def _progress(pending: workflow.RunResult) -> str:
     return line
 
 
-def _cards(user_id: str, thread_id: int, pending: workflow.RunResult) -> None:
-    """Show one message's cards with a decision each, saved together in one step."""
-    st.info(t("drafts.ai_label", provider=drafting.model_provider()), icon=":material/smart_toy:")
-    text = _message_text(user_id, thread_id, pending.message_id)
-    st.caption(_progress(pending))
-    st.markdown(f"**{t('drafts.your_message', day=pending.message_day)}**")
-    if text is not None:
-        st.text(text)
-    if pending.error is not None:
-        st.error(t(pending.error), icon=":material/error:")
+def card_form(
+    user_id: str, cards: Sequence[dict], form_key: str, error: str | None = None
+) -> list[dict] | None:
+    """Show cards with a decision each, saved in one step; return the decisions once saved."""
+    # Shared with the drafts from a photo or a voice note (T11.10, views/media_drafts.py).
+    if error is not None:
+        st.error(t(error), icon=":material/error:")
     names = food_names()
     # The gymer's own entries of the cards' days, read once, for the "already logged" notes.
-    logged = _logged_on(user_id, {card["day"] for card in pending.cards if card["kind"] == "food"})
-    form_key = f"drafts_form_{pending.message_id}"
+    logged = _logged_on(user_id, {card["day"] for card in cards if card["kind"] == "food"})
     with st.form(form_key):
         choices = []
-        for index, card in enumerate(pending.cards):
+        for index, card in enumerate(cards):
             key = f"{form_key}_{index}"
             with st.container(border=True):
                 if card["kind"] == "food":
@@ -365,15 +362,30 @@ def _cards(user_id: str, thread_id: int, pending: workflow.RunResult) -> None:
                 )
             choices.append((action, card, edited))
         saved = st.form_submit_button(t("drafts.save"), type="primary", icon=":material/save:")
-    if saved:
-        # Approve saves what the card shows: changed values go as an edit, which the workflow
-        # checks again like every decision.
-        decisions = [
-            {"action": "edit", "card": edited}
-            if action == "approve" and edited != card
-            else {"action": action}
-            for action, card, edited in choices
-        ]
+    if not saved:
+        return None
+    # Approve saves what the card shows: changed values go as an edit, which the workflow checks
+    # again like every decision.
+    return [
+        {"action": "edit", "card": edited}
+        if action == "approve" and edited != card
+        else {"action": action}
+        for action, card, edited in choices
+    ]
+
+
+def _cards(user_id: str, thread_id: int, pending: workflow.RunResult) -> None:
+    """Show one message's cards with a decision each, saved together in one step."""
+    st.info(t("drafts.ai_label", provider=drafting.model_provider()), icon=":material/smart_toy:")
+    text = _message_text(user_id, thread_id, pending.message_id)
+    st.caption(_progress(pending))
+    st.markdown(f"**{t('drafts.your_message', day=pending.message_day)}**")
+    if text is not None:
+        st.text(text)
+    decisions = card_form(
+        user_id, pending.cards, f"drafts_form_{pending.message_id}", pending.error
+    )
+    if decisions is not None:
         drafter = _drafter(user_id)
         try:
             # The run resumes with the instruction it started with, so cards already drafted can

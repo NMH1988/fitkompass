@@ -6,8 +6,20 @@ from src import config
 
 
 def test_allowed_models():
-    """Allowed chat models are the three gpt-5 models chosen in docs/ARCHITECTURE.md."""
-    assert config.ALLOWED_MODELS == ("openai/gpt-5-mini", "openai/gpt-5-nano", "openai/gpt-5")
+    """Allowed: the three gpt-5 models of docs/ARCHITECTURE.md and the audio model (T11.10)."""
+    assert config.ALLOWED_MODELS == (
+        "openai/gpt-5-mini",
+        "openai/gpt-5-nano",
+        "openai/gpt-5",
+        "openai/gpt-audio-mini",
+    )
+
+
+def test_media_models_are_allowed():
+    """The photo and voice models (T11.10) are on the allowed list; the photo one is the draft's."""
+    assert config.PHOTO_MODEL == config.DRAFT_MODEL
+    assert config.VOICE_MODEL == "openai/gpt-audio-mini"
+    assert {config.PHOTO_MODEL, config.VOICE_MODEL} <= set(config.ALLOWED_MODELS)
 
 
 def test_default_models_are_allowed():

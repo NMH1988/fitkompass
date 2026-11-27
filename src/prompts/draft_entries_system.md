@@ -36,6 +36,8 @@ You will receive the following application-provided inputs:
 - `<exercises>`: A fixed list of available exercises.
 - `<message>`: The client's message to their coach.
 
+The message may also be text the application made from the client's own media: the description of a photo of their meal (one food or beverage per line, with an estimated amount, such as `white rice, cooked, approximately 180 g`) or the transcript of their own voice note. Treat it exactly like a message: extract only what it states.
+
 The `<exercises>` list uses the following format:
 
 `id: English name / German name`

@@ -6,9 +6,11 @@ refused by the guard), the message gets a row in `message_drafts`, unique per me
 reaches a model again. `save_step()` writes the step's approved entries and that row in one
 transaction (`BEGIN IMMEDIATE`, so two steps wait for each other), after checking inside it that
 the message has no row yet: the same message decided in two tabs is logged once, and a failed write
-leaves neither. `mark_finished()` writes the row alone for a message with no card or a refused one;
-a second such write is a no-op. The row refers to the message and goes with it (either side's
-delete); no logged entry refers to a message, so neither side's delete is blocked.
+leaves neither. `save_entries()` writes the approved entries drafted from a photo or a voice note
+(T11.10), which refer to nothing, as the file is never stored. `mark_finished()` writes the row
+alone for a message with no card or a refused one; a second such write is a no-op. The row refers
+to the message and goes with it (either side's delete); no logged entry refers to a message, so
+neither side's delete is blocked.
 
 Only the gymer reads their own messages here and writes their own entries; every other case is the
 same `NotFound`, and nothing is written. A relationship's end is read as a value (`ended_at`).
@@ -184,19 +186,13 @@ def mark_finished(
         return conn.execute(_MARK, (message_id,)).rowcount == 1
 
 
-def save_step(
-    conn: sqlite3.Connection,
+def _rows(
     user_id: str,
-    message_id: int,
-    *,
-    foods: Sequence[DraftedFood] = (),
-    weights: Sequence[DraftedWeight] = (),
-    workouts: Sequence[DraftedWorkout] = (),
-    created_at: str | None = None,
-) -> bool:
-    """Log a message's approved entries and mark it, in one transaction; False if already marked."""
-    # Every row is checked before the transaction, so a bad value writes nothing. Inside it: the
-    # message is the gymer's own and has no drafted row yet; if it has one, nothing is written.
+    foods: Sequence[DraftedFood],
+    weights: Sequence[DraftedWeight],
+    workouts: Sequence[DraftedWorkout],
+) -> tuple[list[tuple], list[tuple], list[tuple]]:
+    """Return the entries' checked rows, so a bad value raises before any transaction starts."""
     food_rows = [
         records._meal_row(
             user_id,
@@ -218,15 +214,63 @@ def save_step(
         (records._workout_day(user_id, workout.performed_on), records._checked_sets(workout.sets))
         for workout in workouts
     ]
+    return food_rows, weight_rows, workout_rows
+
+
+def _write_rows(
+    conn: sqlite3.Connection, rows: tuple[list[tuple], list[tuple], list[tuple]]
+) -> None:
+    """Write checked rows inside the caller's transaction."""
+    food_rows, weight_rows, workout_rows = rows
+    for row in food_rows:
+        records._write_meal(conn, row)
+    for row in weight_rows:
+        records._write_weight(conn, row)
+    for session, checked in workout_rows:
+        records._write_session(conn, session, checked)
+
+
+def save_step(
+    conn: sqlite3.Connection,
+    user_id: str,
+    message_id: int,
+    *,
+    foods: Sequence[DraftedFood] = (),
+    weights: Sequence[DraftedWeight] = (),
+    workouts: Sequence[DraftedWorkout] = (),
+    created_at: str | None = None,
+) -> bool:
+    """Log a message's approved entries and mark it, in one transaction; False if already marked."""
+    # Every row is checked before the transaction, so a bad value writes nothing. Inside it: the
+    # message is the gymer's own and has no drafted row yet; if it has one, nothing is written.
+    rows = _rows(user_id, foods, weights, workouts)
     with transaction(conn):
         _own_message(conn, user_id, message_id, created_at)
         if conn.execute(_DRAFTED, (message_id,)).fetchone() is not None:
             return False
-        for row in food_rows:
-            records._write_meal(conn, row)
-        for row in weight_rows:
-            records._write_weight(conn, row)
-        for session, checked in workout_rows:
-            records._write_session(conn, session, checked)
+        _write_rows(conn, rows)
         conn.execute(_MARK, (message_id,))
         return True
+
+
+def save_entries(
+    conn: sqlite3.Connection,
+    user_id: object,
+    *,
+    foods: Sequence[DraftedFood] = (),
+    weights: Sequence[DraftedWeight] = (),
+    workouts: Sequence[DraftedWorkout] = (),
+) -> int:
+    """Log a gymer's own approved entries drafted from a photo or voice note (T11.10); the count."""
+    # Nothing refers to the file they came from: it was never stored. Only a gymer writes, and
+    # only their own rows; every other case is NotFound and writes nothing.
+    try:
+        user_id = values.user_id(user_id)
+    except values.StoreValueError:
+        raise NotFound from None
+    rows = _rows(user_id, foods, weights, workouts)
+    with transaction(conn):
+        if role_of(conn, user_id) != "gymer":
+            raise NotFound
+        _write_rows(conn, rows)
+    return len(foods) + len(weights) + len(workouts)

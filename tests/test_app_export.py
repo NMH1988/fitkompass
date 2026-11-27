@@ -308,12 +308,34 @@ def test_the_image_scan_ignores_other_code(code):
     assert _image_inputs(code) == []
 
 
+# The one reviewed image input (T11.10): the gymer's meal photo, uploaded or taken on Today, read
+# only by src/media.py, which checks its size, its type by content and its pixel count from the
+# header before Pillow decodes it, and re-encodes it without metadata (docs/SECURITY.md). Each file
+# may hold only these kinds of hit.
+REVIEWED_IMAGE_INPUTS = {
+    "src/media.py": ("from PIL import",),
+    "views/media_drafts.py": (".file_uploader", ".camera_input"),
+}
+
+
 def test_the_app_opens_no_image_file():
-    """No image input in app.py, views/ or src/, so no untrusted image reaches Pillow unreviewed."""
+    """No image input in app.py, views/ or src/ but T11.10's reviewed one: none unreviewed."""
     root = APP.parent
     files = [APP, *sorted((root / "views").rglob("*.py")), *sorted((root / "src").rglob("*.py"))]
     found = {
-        str(path.relative_to(root)): _image_inputs(path.read_text(encoding="utf-8"))
+        path.relative_to(root).as_posix(): _image_inputs(path.read_text(encoding="utf-8"))
         for path in files
     }
-    assert {path: hits for path, hits in found.items() if hits} == {}
+    unreviewed = {
+        path: [
+            hit
+            for hit in hits
+            if not any(kind in hit for kind in REVIEWED_IMAGE_INPUTS.get(path, ()))
+        ]
+        for path, hits in found.items()
+    }
+    assert {path: hits for path, hits in unreviewed.items() if hits} == {}
+    # The reviewed files still hold their input, so the list above names real code.
+    for path, kinds in REVIEWED_IMAGE_INPUTS.items():
+        for kind in kinds:
+            assert any(kind in hit for hit in found[path]), (path, kind)
