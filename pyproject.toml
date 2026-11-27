@@ -43,7 +43,8 @@ dependencies = [
     "pydantic==2.14.1",
     "rank-bm25==0.2.2",
     "rapidfuzz==3.14.6",
-    # Not used by our code: it comes with streamlit and reportlab. Pinned like the rest, so an
+    # Used since T11.10 to check a photo and re-encode it without its metadata (src/media.py); it
+    # also comes with streamlit and reportlab (MIT-CMU). Pinned like the rest, so an
     # existing venv upgrades too and the pillow 12.3.0 advisories stay out (T1.6a;
     # docs/SECURITY.md); Dependabot proposes bumps.
     "pillow==13.0.0",

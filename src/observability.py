@@ -69,6 +69,11 @@ EVENTS = frozenset(
         # counts (messages read, refused by the guard, cards, dropped entries, entries logged);
         # never a message, a food, a value or a user.
         "draft_entries",
+        # A run or a decision of the drafts from a photo or a voice note (T11.10): the kind
+        # (photo or voice), its outcome code and counts (refused by the guard, cards, dropped
+        # entries, entries logged); never the file, its description or transcript, a food, a
+        # value or a user.
+        "media_draft",
         LOG_FAILED_EVENT,
     }
 )
@@ -107,6 +112,7 @@ ALLOWED_FIELDS = frozenset(
         "prompt_query",
         "prompt_review",
         "prompt_drafts",
+        "prompt_media",
         # The weekly review (T9.16): how many drafts were asked for, and the failed checks' codes.
         "attempts",
         "checks",

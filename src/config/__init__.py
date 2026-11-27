@@ -6,8 +6,9 @@ Each module holds one concern: `paths` (files), `models` (models, budgets, price
 secrets.toml or the environment), `knowledge` (the knowledge base and its search), `nutrition`
 (the energy tools, the USDA table and API), `training` (the workout log), `evaluation`, `review`
 (the weekly review), `realtime` (the chat socket), `drafting` (drafts from a gymer's messages,
-T11.5), `coach_thread` (the coach's AI reading a client's thread, T11.6a) and `ui`. A name is
-defined in one module only (tests/test_config_package.py).
+T11.5), `coach_thread` (the coach's AI reading a client's thread, T11.6a), `media` (a photo or
+a voice note to drafts, T11.10) and `ui`. A name is defined in one module only
+(tests/test_config_package.py).
 
 Code reads a setting through the package (`config.CHUNK_SIZE`), so a test patches it there. The
 functions in `environment` call each other directly (e.g. `tracing_demo_unmasked()` calls
@@ -21,6 +22,7 @@ from src.config.environment import *  # noqa: F403
 from src.config.evaluation import *  # noqa: F403
 from src.config.knowledge import *  # noqa: F403
 from src.config.limits import *  # noqa: F403
+from src.config.media import *  # noqa: F403
 from src.config.messages import *  # noqa: F403
 from src.config.models import *  # noqa: F403
 from src.config.nutrition import *  # noqa: F403
