@@ -81,6 +81,11 @@ def _code(call) -> str:
         ("Mail me@example.invalid", "Mail me" + WJ + "@example.invalid"),
         ("<img src=x onerror=alert(1)>", "\\<img src=x onerror=alert(1)\\>"),
         ("Ratio 1:2, at 10:30", "Ratio 1:2, at 10:30"),
+        # A character reference Markdown would decode into a link's colon, dot or "@" (T11.6a).
+        ("https&#58;//attacker.example", "https\\&#58;//attacker.example"),
+        ("www&period;attacker.example", "www\\&period;attacker.example"),
+        ("x&commat;attacker.example", "x\\&commat;attacker.example"),
+        ("Salt & pepper", "Salt \\& pepper"),
     ],
 )
 def test_the_steps_keep_markdown_but_no_image_or_link(steps, shown):

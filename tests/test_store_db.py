@@ -318,7 +318,7 @@ def test_connect_creates_the_file_in_the_configured_folder_with_every_table(stor
         for row in store_conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
     }
     assert names == TABLES | {SQLITE_SEQUENCE}
-    assert db.schema_version(store_conn) == len(schema.MIGRATIONS) == 11
+    assert db.schema_version(store_conn) == len(schema.MIGRATIONS) == 12
 
 
 def test_the_store_folder_is_gitignored_and_inside_the_project():
@@ -820,7 +820,7 @@ def test_a_plan_needs_two_users_and_a_food_appears_once_per_meal(store_conn):
 
 
 def test_upgrading_a_version_9_file_adds_the_recipe_tables_and_an_empty_mark(tmp_path):
-    """A version 9 file gets migrations 10 and 11: empty recipe tables, its meal items unmarked."""
+    """A version 9 file gets migrations 10 to 12: empty recipe tables, its meal items unmarked."""
     path = tmp_path / "old.sqlite3"
     audit_rows = _old_file(path, 9)
     raw = sqlite3.connect(path, autocommit=True)
@@ -832,7 +832,7 @@ def test_upgrading_a_version_9_file_adds_the_recipe_tables_and_an_empty_mark(tmp
     )
     raw.close()
     with db.connect(path) as conn:
-        assert db.schema_version(conn) == len(schema.MIGRATIONS) == 11
+        assert db.schema_version(conn) == len(schema.MIGRATIONS) == 12
         for table in ("recipes", "recipe_versions", "recipe_ingredients", "recipe_ratings"):
             assert conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0] == 0
         marks = [row[0] for row in conn.execute("SELECT from_recipe FROM meal_items")]
@@ -910,22 +910,29 @@ def test_one_open_ai_consent_per_purpose_and_relationship(store_conn):
         _insert(store_conn, "ai_consents", row)
     _insert(store_conn, "ai_consents", {**row, "withdrawn_at": NOW})
     _insert(store_conn, "ai_consents", {**row, "purpose": "media"})
-    thread = {**row, "purpose": "coach_thread", "relationship_id": 1}
+    thread = {**row, "purpose": "coach_thread", "relationship_id": 1, "use": "chat"}
     _insert(store_conn, "ai_consents", thread)
     with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
         _insert(store_conn, "ai_consents", thread)
-    _insert(store_conn, "ai_consents", {**thread, "purpose": "client_notes"})
+    # Each use of (b) has its own open row (T11.6a).
+    _insert(store_conn, "ai_consents", {**thread, "use": "reply"})
+    _insert(store_conn, "ai_consents", {**thread, "purpose": "client_notes", "use": None})
 
 
 @pytest.mark.parametrize(
     "changes",
     [
-        {"purpose": "coach_thread"},  # given to one coach: needs its relationship
+        {"purpose": "coach_thread", "use": "chat"},  # given to one coach: needs its relationship
         {"purpose": "client_notes"},
         {"relationship_id": 1},  # not given to one coach: names none
         {"purpose": "sharing"},
         {"text_version": "0123456789AB"},
         {"text_version": "0123456789a"},
+        # Consent (b) needs a use, from the list; no other purpose has one (T11.6a).
+        {"purpose": "coach_thread", "relationship_id": 1},
+        {"purpose": "coach_thread", "relationship_id": 1, "use": "summary"},
+        {"use": "chat"},
+        {"purpose": "client_notes", "relationship_id": 1, "use": "chat"},
     ],
 )
 def test_an_ai_consent_row_that_breaks_a_rule_is_refused(store_conn, changes):
@@ -942,6 +949,7 @@ def test_an_ai_consent_row_that_breaks_a_rule_is_refused(store_conn, changes):
         "UPDATE ai_consents SET purpose = 'media', withdrawn_at = given_at",
         "UPDATE ai_consents SET given_at = '2026-10-28T10:00:00+00:00', withdrawn_at = given_at",
         "UPDATE ai_consents SET user_id = 'c1', withdrawn_at = given_at",
+        "UPDATE ai_consents SET use = 'chat', withdrawn_at = given_at",
     ],
 )
 def test_an_ai_consent_changes_only_when_it_is_withdrawn(store_conn, update):
@@ -962,11 +970,11 @@ def test_an_ai_consent_changes_only_when_it_is_withdrawn(store_conn, update):
 def test_upgrading_a_version_10_file_adds_the_consent_and_drafted_tables_and_keeps_the_rows(
     tmp_path,
 ):
-    """A version 10 file gets migration 11: empty consent and drafted tables, audit rows kept."""
+    """A version 10 file gets migrations 11 and 12: empty consent and drafted tables, audit kept."""
     path = tmp_path / "old.sqlite3"
     audit_rows = _old_file(path, 10)
     with db.connect(path) as conn:
-        assert db.schema_version(conn) == len(schema.MIGRATIONS) == 11
+        assert db.schema_version(conn) == len(schema.MIGRATIONS) == 12
         assert conn.execute("SELECT count(*) FROM ai_consents").fetchone()[0] == 0
         assert conn.execute("SELECT count(*) FROM message_drafts").fetchone()[0] == 0
         assert [tuple(row) for row in conn.execute("SELECT * FROM audit_log ORDER BY id")] == (
@@ -992,6 +1000,65 @@ def test_a_migration_11_that_fails_halfway_leaves_the_version_10_file_as_it_was(
         assert raw.execute("PRAGMA user_version").fetchone()[0] == 10
         names = {row[0] for row in raw.execute("SELECT name FROM sqlite_master")}
         assert not {"ai_consents", "message_drafts"} & names
+    finally:
+        raw.close()
+
+
+# --- Consent (b)'s switch per use (T11.6a, migration 12) ----------------------------------------
+
+
+def test_upgrading_a_version_11_file_keeps_every_consent_row_and_gives_b_the_chat_use(tmp_path):
+    """Migration 12 keeps each consent row as it was; an earlier (b) row becomes the chat use."""
+    path = tmp_path / "old.sqlite3"
+    _old_file(path, 11)
+    raw = sqlite3.connect(path, autocommit=True)
+    raw.execute("PRAGMA foreign_keys = ON")
+    # Only (b) rows, so the update below meets the trigger, not the table's use check.
+    rows = [
+        {**VALID_ROWS["ai_consents"], "withdrawn_at": "2026-10-28T10:00:00+00:00"},
+        {**VALID_ROWS["ai_consents"], "purpose": "coach_thread", "relationship_id": 1},
+    ]
+    for row in rows:
+        _insert(raw, "ai_consents", row)
+    before = [tuple(row) for row in raw.execute("SELECT * FROM ai_consents ORDER BY id")]
+    raw.close()
+    with db.connect(path) as conn:
+        assert db.schema_version(conn) == len(schema.MIGRATIONS) == 12
+        columns = "id, user_id, purpose, relationship_id, text_version, given_at, withdrawn_at"
+        after = [
+            tuple(row) for row in conn.execute(f"SELECT {columns} FROM ai_consents ORDER BY id")
+        ]
+        assert after == before
+        uses = [row[0] for row in conn.execute("SELECT use FROM ai_consents ORDER BY id")]
+        assert uses == [None, "chat"]
+        # The trigger and the one-open index are built again with the table.
+        with pytest.raises(sqlite3.IntegrityError, match="only changes when it is withdrawn"):
+            conn.execute("UPDATE ai_consents SET use = 'reply', withdrawn_at = given_at")
+        with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
+            _insert(conn, "ai_consents", {**rows[1], "use": "chat"})
+
+
+def test_a_migration_12_that_fails_halfway_leaves_the_version_11_file_as_it_was(tmp_path):
+    """A failure after migration 12 rebuilt the table undoes it: version 11, the old table."""
+    path = tmp_path / "old.sqlite3"
+    _old_file(path, 11)
+    raw = sqlite3.connect(path, autocommit=True)
+    _insert(raw, "ai_consents", VALID_ROWS["ai_consents"])
+    # A trigger named as migration 12's last one, on another table, survives the drop and fails it.
+    raw.execute("DROP TRIGGER ai_consents_only_withdrawn")
+    raw.execute(
+        "CREATE TRIGGER ai_consents_only_withdrawn BEFORE DELETE ON users BEGIN SELECT 1; END"
+    )
+    raw.close()
+    with pytest.raises(sqlite3.OperationalError, match="ai_consents_only_withdrawn"):
+        with db.connect(path):
+            pass
+    raw = sqlite3.connect(path)
+    try:
+        assert raw.execute("PRAGMA user_version").fetchone()[0] == 11
+        columns = [row[1] for row in raw.execute("PRAGMA table_info(ai_consents)")]
+        assert "use" not in columns
+        assert raw.execute("SELECT count(*) FROM ai_consents").fetchone()[0] == 1
     finally:
         raw.close()
 

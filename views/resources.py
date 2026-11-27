@@ -5,7 +5,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from src import account, chat, config, demo, drafting, llm, media
+from src import account, chat, coach_thread, config, demo, drafting, llm, media
 from src.rag import hybrid, store
 
 
@@ -27,6 +27,12 @@ def keyword_index(_chroma):
 def chat_model():
     """Build the answer model's client once per app process."""
     return llm.build_chat_model()
+
+
+@st.cache_resource(show_spinner=False)
+def coach_chat_model():
+    """Build a coach's answer model's client once per process, pinned as consent (b) says."""
+    return coach_thread.build_chat_model()
 
 
 @st.cache_resource(show_spinner=False)

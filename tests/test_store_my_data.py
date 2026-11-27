@@ -97,8 +97,12 @@ def full_world(store_conn):
     )
     # T11.5: the gymers' Art. 9 consents, (b) given to their coach, and a drafted message's mark.
     ai_consents.give(store_conn, world.SHARED, "message_drafts", VERSION)
-    ai_consents.give(store_conn, world.SHARED, "coach_thread", VERSION, threads[world.SHARED])
-    ai_consents.give(store_conn, world.OTHERS, "coach_thread", VERSION, threads[world.OTHERS])
+    ai_consents.give(
+        store_conn, world.SHARED, "coach_thread", VERSION, threads[world.SHARED], "chat"
+    )
+    ai_consents.give(
+        store_conn, world.OTHERS, "coach_thread", VERSION, threads[world.OTHERS], "chat"
+    )
     store_conn.execute("INSERT INTO message_drafts (message_id) VALUES (?)", (drafted,))
     # T9.12 adds the functions for these two tables; the rows are written directly here.
     for coach in (world.COACH_A, world.COACH_B):
@@ -638,6 +642,9 @@ def test_only_the_gymers_export_holds_their_consents_and_drafted_marks(full_worl
     """The gymer exports every consent row and their drafted messages; the coach exports neither."""
     gymer = json.loads(my_data.export_user_data(full_world, world.SHARED))
     assert _purposes(gymer["ai_consents"]) == [("coach_thread", True), ("message_drafts", False)]
+    # Consent (b)'s switch per use is in the export (T11.6a).
+    uses = {row["purpose"]: row["use"] for row in gymer["ai_consents"]}
+    assert uses == {"coach_thread": "chat", "message_drafts": None}
     assert len(gymer["message_drafts"]) == 1
     coach = json.loads(my_data.export_user_data(full_world, world.COACH_A))
     assert coach["ai_consents"] == [] and coach["message_drafts"] == []

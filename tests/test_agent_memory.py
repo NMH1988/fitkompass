@@ -313,7 +313,7 @@ def test_langgraphs_own_signals_pass_through_the_turn_node():
     """An interrupt() pause (T9.7) is not caught as a failed turn: it reaches the graph."""
     from langgraph.errors import GraphInterrupt
 
-    def pause(history, domains):
+    def pause(history, domains, threads):
         """Raise the signal interrupt() raises."""
         raise GraphInterrupt(())
 

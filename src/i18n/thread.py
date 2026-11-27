@@ -10,16 +10,19 @@ EN: dict[str, str] = {
         "this app's data file on this computer, with the sender and the time. A former client "
         "still reads your conversation after your relationship ends, and so do you; neither of "
         "you can send then. Either side's Delete everything (My data) deletes the conversation for "
-        "both. Messages are not sent to the AI, except a client's own messages when the client "
-        "asks for AI drafts of their log entries, with their consent; yours never are."
+        "both. Messages are sent to the AI only with the client's consent: a client's own "
+        "messages when the client asks for AI drafts of their log entries, and, when you ask your "
+        "AI chat about a client's messages, both sides' messages of the week you ask about, only "
+        "if that client switched this use on (it ends with your relationship)."
     ),
     "messages.intro_gymer": (
         "Messages between you and your coach. They are stored in this app's data file on this "
         "computer, with the sender and the time. A former coach still reads your conversation "
         "after your relationship ends, and so do you; neither of you can send then. Either side's "
-        "Delete everything (My data) deletes the conversation for both. Your coach's messages are "
-        "never sent to the AI; yours are only when you press the button for AI drafts below, with "
-        "your consent."
+        "Delete everything (My data) deletes the conversation for both. Messages are sent to the "
+        "AI only with your consent: yours when you press the button for AI drafts below, and both "
+        "sides' messages of a week when your coach asks their AI chat about them, only if you "
+        "switched that use on below."
     ),
     "messages.made_up_only": "Use made-up data only: do not write real health data.",
     "messages.pick": "Conversation",
@@ -59,17 +62,21 @@ DE: dict[str, str] = {
         "Absender und Uhrzeit in der Datendatei dieser App auf diesem Computer gespeichert. Ein "
         "ehemaliger Klient liest Ihr Gespräch auch nach dem Ende Ihrer Verbindung weiter, ebenso "
         "Sie; senden kann dann keiner von Ihnen. „Alles löschen“ (Meine Daten) löscht das Gespräch "
-        "für beide Seiten, egal wer es auslöst. Nachrichten werden nicht an die KI gesendet, außer "
-        "den eigenen Nachrichten eines Klienten, wenn er mit seiner Einwilligung KI-Entwürfe "
-        "seiner Tagebucheinträge anfordert; Ihre nie."
+        "für beide Seiten, egal wer es auslöst. Nachrichten werden nur mit Einwilligung des "
+        "Klienten an die KI gesendet: die eigenen Nachrichten eines Klienten, wenn er KI-Entwürfe "
+        "seiner Tagebucheinträge anfordert, und, wenn Sie Ihren KI-Chat nach den Nachrichten "
+        "eines Klienten fragen, die Nachrichten beider Seiten der gefragten Woche, nur wenn dieser "
+        "Klient diese Nutzung eingeschaltet hat (sie endet mit Ihrer Verbindung)."
     ),
     "messages.intro_gymer": (
         "Nachrichten zwischen Ihnen und Ihrem Coach. Sie werden mit Absender und Uhrzeit in der "
         "Datendatei dieser App auf diesem Computer gespeichert. Ein ehemaliger Coach liest Ihr "
         "Gespräch auch nach dem Ende Ihrer Verbindung weiter, ebenso Sie; senden kann dann keiner "
         "von Ihnen. „Alles löschen“ (Meine Daten) löscht das Gespräch für beide Seiten, egal wer "
-        "es auslöst. Die Nachrichten Ihres Coachs werden nie an die KI gesendet; Ihre nur, wenn "
-        "Sie unten auf die Schaltfläche für KI-Entwürfe klicken, mit Ihrer Einwilligung."
+        "es auslöst. Nachrichten werden nur mit Ihrer Einwilligung an die KI gesendet: Ihre, wenn "
+        "Sie unten auf die Schaltfläche für KI-Entwürfe klicken, und die Nachrichten beider "
+        "Seiten einer Woche, wenn Ihr Coach den KI-Chat danach fragt, nur wenn Sie diese Nutzung "
+        "unten eingeschaltet haben."
     ),
     "messages.made_up_only": (
         "Verwenden Sie nur erfundene Daten: Schreiben Sie keine echten Gesundheitsdaten."

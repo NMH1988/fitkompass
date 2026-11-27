@@ -19,6 +19,14 @@ further model call (AC-2; T9.3). In a coach's chat (T9.7) a `remember_preference
 either; a turn that proposed (or was refused) and then gave no answer with a basis ends with a fixed
 line about the proposal (kind `memory`) instead, unless its searches found nothing.
 
+In a coach's chat, a client's thread (`get_client_thread`, T11.6a) reaches the model only while the
+relationship is active and the client's consent (b) has its `chat` use on, checked again before
+every model call (`visible_messages()`): when either fails, the earlier questions and answers marked
+with that client are left out of what the model receives, and within the turn the thread's result
+is replaced by the tool's fixed notice (its call ID kept) and every later model reply goes with its
+tool results, as a reply or a further call's arguments may quote the thread. The state is never
+changed for this, so the page still shows what the coach has already read, with no line about it.
+
 The caller passes the text and the conversation's earlier messages (T9.4), and gets back only the
 `TurnResult` and the question the guard accepted: the messages and the tool runs are private state.
 The graph is never checkpointed (`src/agent/memory.py` keeps the conversation). What cannot live
@@ -41,7 +49,7 @@ from typing import Annotated, Any, NotRequired, TypedDict
 
 from langchain_chroma import Chroma
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import StructuredTool
 from langchain_core.tools.base import ToolCall
@@ -62,7 +70,7 @@ from src.rag.hybrid import KeywordIndex
 from src.rag.query_translation import Domain
 from src.rag.retriever import RetrievedChunk
 from src.rag.sources import Source
-from src.tools import coach_clients, registry
+from src.tools import client_thread, coach_clients, registry
 from src.tools.registry import ToolRun
 from src.usage import UsageRecorder
 
@@ -87,6 +95,9 @@ class TurnInput(TypedDict):
     # The domain of each earlier answered turn, by its question message's id (T10.5); a question
     # with none counts as "unknown", which keeps every tool.
     history_domains: NotRequired[Mapping[str, Domain]]
+    # The client references whose thread each earlier answered turn may hold, by its question
+    # message's id (T11.6a).
+    history_threads: NotRequired[Mapping[str, Sequence[str]]]
 
 
 class TurnOutput(TypedDict):
@@ -101,6 +112,10 @@ class TurnOutput(TypedDict):
     # The question's domain (T10.5), once the plan node ran: the conversation keeps it with an
     # answered turn, for the turns after it.
     domain: NotRequired[Domain]
+    # The client references whose thread this turn's answer may hold (T11.6a): its own thread
+    # results and the marks of the earlier turns it was given. The conversation keeps them with
+    # the answer.
+    threads: NotRequired[list[str]]
 
 
 class LoopInput(TypedDict):
@@ -143,6 +158,9 @@ class TurnState(TurnInput, TurnOutput, LoopInput, LoopOutput, total=False):
     rounds: int
     # True when a round's searches found nothing and nothing else gave the answer a basis (AC-2).
     stopped: bool
+    # The earlier turns the model sees that hold a client's thread (T11.6a): the ids of the
+    # question and its answer, with the client references they are marked with.
+    thread_marks: list[tuple[tuple[str, ...], tuple[str, ...]]]
 
 
 @dataclass(frozen=True)
@@ -172,6 +190,18 @@ class TurnContext:
     # preferences for <memories>. None for a guest, who is not offered remember_preference.
     coach: preferences.CoachMemory | None = None
     proposals: preferences.Proposals = field(default_factory=preferences.Proposals)
+    # A coach's chat (T11.6a): whether a client's thread may reach the model now, by reference
+    # (the relationship active and consent (b)'s chat use on), asked before every model call;
+    # None for a guest, whose chat has no thread tool.
+    thread_open: Callable[[str], bool] | None = None
+    # This turn's thread results the model received: their tool call id and client reference.
+    # A set per id: a provider that reuses an id must not let a later read hide an earlier one.
+    thread_log: dict[str, set[str]] = field(default_factory=dict)
+    # The client references of every thread the turn holds: each get_client_thread call's, any
+    # result (a notice too, so nothing differs by what the client chose), and the marks of the
+    # earlier turns it is given. While it holds any, the knowledge base search and the USDA API
+    # are off, as consent (b) names neither's services (the caller's food tool reads it too).
+    thread_calls: set[str] = field(default_factory=set)
     # The turn's prompts, read by run_turn() before the graph runs so the run's metadata carries
     # their versions (T10.4), or the error reading them raised (a PromptMissingError, or a bug),
     # which the prepare node raises after the guard. None: the prepare node reads them itself (a
@@ -281,9 +311,12 @@ def _turn_tools(context: TurnContext, training_only: bool) -> dict[str, Structur
 def _tools(context: TurnContext, training_only: bool = False) -> list[StructuredTool]:
     """Return the tools the model is given: the turn's own, and the search for a whole turn."""
     tools = list(_turn_tools(context, training_only).values())
-    if context.search_log is not None:
+    if context.search_log is not None and not context.thread_calls:
+        # Not offered while the turn holds a client's thread (T11.6a).
         tools.append(search.search_tool_definition())
-    if context.coach is not None:
+    if context.coach is not None and not context.thread_calls:
+        # Not offered while the turn holds a client's thread (T11.6a): a saved preference would
+        # carry what the model read into every later chat.
         tools.append(preferences.tool_definition())
     return tools
 
@@ -294,6 +327,69 @@ def _answer_text(reply: AIMessage) -> str:
     if not text:
         raise llm.LLMError(diagnostic="empty answer")
     return text
+
+
+def _thread_marks(
+    history: Sequence[AnyMessage], marks: Mapping[str, Sequence[str]]
+) -> list[tuple[tuple[str, ...], tuple[str, ...]]]:
+    """Return each marked earlier question with its answer's id and its client references."""
+    found = []
+    for place, message in enumerate(history):
+        refs = marks.get(message.id or "") if isinstance(message, HumanMessage) else None
+        if not refs:
+            continue
+        # The conversation keeps a question and its answer together (memory.first_kept()).
+        ids = [message.id or ""]
+        if place + 1 < len(history) and not isinstance(history[place + 1], HumanMessage):
+            ids.append(history[place + 1].id or "")
+        found.append((tuple(ids), tuple(refs)))
+    return found
+
+
+def _notice(message: ToolMessage) -> ToolMessage:
+    """Return the thread tool's fixed notice in place of a thread result, its call id kept."""
+    # The call keeps an answer, so the request stays valid; the answer holds no message.
+    return registry.tool_message(
+        message.tool_call_id, client_thread.not_available(), client_thread.THREAD_TOOL
+    )
+
+
+def _closed_result(message: ToolMessage, context: TurnContext, closed: set[str]) -> bool:
+    """Return True if a thread result under this call id read any client now closed."""
+    return bool(context.thread_log.get(message.tool_call_id, set()) & closed)
+
+
+def visible_messages(state: TurnState, context: TurnContext) -> list[AnyMessage]:
+    """Return the messages the model may receive now, with closed clients' threads left out."""
+    messages = list(state["messages"])
+    if context.thread_open is None:
+        return messages
+    marks = state.get("thread_marks", [])
+    logged = {ref for refs in context.thread_log.values() for ref in refs}
+    refs = {ref for _, found in marks for ref in found} | logged
+    # Asked once per model call for each client, right before it (AC-50).
+    closed = {ref for ref in refs if not context.thread_open(ref)}
+    if not closed:
+        return messages
+    hidden = {message_id for ids, found in marks if set(found) & closed for message_id in ids}
+    kept: list[AnyMessage] = [
+        message for message in messages if message.id is None or message.id not in hidden
+    ]
+    for place, message in enumerate(kept):
+        if isinstance(message, ToolMessage) and _closed_result(message, context, closed):
+            # Every model reply after a closed thread's result goes, with its tool results: its text
+            # or a further call's arguments may quote the thread. The results of the same round
+            # stay, as the reply that asked for them came before the thread.
+            later = range(place + 1, len(kept))
+            cut = next((at for at in later if isinstance(kept[at], AIMessage)), len(kept))
+            round_results = [
+                _notice(other)
+                if isinstance(other, ToolMessage) and _closed_result(other, context, closed)
+                else other
+                for other in kept[place + 1 : cut]
+            ]
+            return [*kept[:place], _notice(message), *round_results]
+    return kept
 
 
 # --- Nodes -----------------------------------------------------------------------------------
@@ -337,6 +433,9 @@ def prepare(state: TurnState, runtime: Runtime[TurnContext]) -> dict[str, Any]:
     system = prompts.answer.text
     memories = context.coach.preferences if context.coach is not None else ()
     history = chat.trim_history(state.get("history") or [])
+    marks = _thread_marks(history, state.get("history_threads") or {})
+    # A marked earlier answer may hold a thread: the search and the USDA API are off (T11.6a).
+    context.thread_calls.update(ref for _, refs in marks for ref in refs)
     # The domains of the earlier turns the model sees (T10.5); a question kept with none is
     # "unknown", which keeps every tool.
     domains = state.get("history_domains") or {}
@@ -346,6 +445,7 @@ def prepare(state: TurnState, runtime: Runtime[TurnContext]) -> dict[str, Any]:
         if isinstance(message, HumanMessage)
     )
     return {
+        "thread_marks": marks,
         "system_prompt": system,
         "translation_prompt": prompts.translation.text,
         # The conversation's latest questions and answers (T9.4), then the user's own question; the
@@ -404,7 +504,7 @@ def agent(state: TurnState, runtime: Runtime[TurnContext]) -> dict[str, Any]:
     # An answer finish() checks for a program is shown only once it has passed (T10.5).
     on_text = None if hidden or state.get("check_program", False) else context.on_text
     try:
-        reply = chat.stream_reply(bound, state["messages"], on_text, record)
+        reply = chat.stream_reply(bound, visible_messages(state, context), on_text, record)
     except llm.ReplyCutOffError:
         if hidden:
             # Nothing was shown and no tool gave a result: the turn ends as "not covered".
@@ -434,6 +534,11 @@ def round_refusal(calls: Sequence[ToolCall], position: int) -> str | None:
     """Return the fixed message for a call over a round's limits, or None if it may run."""
     if position >= config.MAX_TOOL_CALLS_PER_ROUND:
         return config.TOO_MANY_TOOL_CALLS_MESSAGE
+    # A thread's result is long and its size a gymer's (T11.6a): one per round.
+    if calls[position]["name"] == client_thread.THREAD_TOOL:
+        threads = sum(call["name"] == client_thread.THREAD_TOOL for call in calls[: position + 1])
+        if threads > config.MAX_THREAD_CALLS_PER_ROUND:
+            return config.TOO_MANY_THREAD_CALLS_MESSAGE
     # A meal plan's result is long (up to MEAL_PLAN_MAX_ITEMS foods), so fewer of them run (T4.5).
     if calls[position]["name"] == registry.MEAL_PLAN_TOOL:
         meal_plans = sum(call["name"] == registry.MEAL_PLAN_TOOL for call in calls[: position + 1])
@@ -457,6 +562,30 @@ def run_checked_call(request: ToolCallRequest, execute: Callable[..., Any]) -> C
     if position is None:
         raise RuntimeError("The tool call is not in the model's last reply.")
     refusal = round_refusal(calls, position)
+    offered = _turn_tools(context, request.state.get("training_only", False))
+    # A round that runs a thread call holds that thread from its first call on, whichever the
+    # ToolNode runs first (T11.6a): the search, the USDA API and a proposal in it are off.
+    for place, other in enumerate(calls):
+        if (
+            other["name"] == client_thread.THREAD_TOOL
+            and client_thread.THREAD_TOOL in offered
+            and round_refusal(calls, place) is None
+        ):
+            context.thread_calls.add(client_thread.reference_of(other["args"]))
+    if refusal is None and call["name"] == search.SEARCH_TOOL and context.thread_calls:
+        # Not offered then; a call all the same is refused before its query goes anywhere.
+        refusal = config.THREAD_SEARCH_OFF_MESSAGE
+    elif (
+        refusal is None
+        and call["name"] == preferences.PREFERENCE_TOOL
+        and context.coach is not None
+        and context.thread_calls
+    ):
+        # Not offered then either; a call all the same proposes nothing, and the coach reads
+        # why (memory.refused.thread). A thread call of the same round counts too, whichever
+        # runs first.
+        refusal = config.THREAD_NO_PREFERENCE_MESSAGE
+        context.proposals.refused.append("thread")
     run: ToolRun | None
     if refusal is not None:
         # OpenAI models always send call ids; a call without one gets "", which the API would
@@ -476,8 +605,10 @@ def run_checked_call(request: ToolCallRequest, execute: Callable[..., Any]) -> C
         message = preferences.propose(context.coach, context.proposals, call, context.turn_id)
         run = None
     else:
-        tools = _turn_tools(context, request.state.get("training_only", False))
-        message, run = registry.run_tool_call(tools, call)
+        message, run = registry.run_tool_call(offered, call)
+        if isinstance(run.result, client_thread.ThreadResult):
+            # Its messages reached the model: checked again before every later call (T11.6a).
+            context.thread_log.setdefault(call["id"] or "", set()).add(run.result.client)
     if run is None:
         return Command(update={"messages": [message]})
     # Each run is reported as it ends, so a turn that fails later still logs it (T8.2).
@@ -497,6 +628,8 @@ def tool_node() -> ToolNode:
         preferences.tool_definition(),
         # A coach's client tools (T9.17): named here, run through the registry with the session's.
         *coach_clients.tool_definitions(),
+        # A coach's thread tool (T11.6a): the same.
+        client_thread.tool_definition(),
     ]
     return ToolNode(definitions, wrap_tool_call=run_checked_call, handle_tool_errors=False)
 
@@ -538,7 +671,13 @@ def finish(state: TurnState, runtime: Runtime[TurnContext]) -> dict[str, Any]:
     runs = tuple(state.get("runs", []))
     proposals = runtime.context.proposals
     # The proposal waits for the coach after the turn, whatever the turn's answer (T9.7).
-    pending = {"proposal": proposals.texts[0]} if proposals.texts else {}
+    pending: dict[str, Any] = {"proposal": proposals.texts[0]} if proposals.texts else {}
+    # The clients whose thread the answer may hold (T11.6a): this turn's thread results and
+    # every earlier turn's marks it was given, so an answer built on an earlier one keeps them.
+    logged = {ref for refs in runtime.context.thread_log.values() for ref in refs}
+    threads = set(runtime.context.thread_calls) | logged
+    if threads:
+        pending["threads"] = sorted(threads)
     if answer is None and (proposals.texts or proposals.refused) and not state.get("stopped"):
         # The model was asked again after the proposal (T9.7) and gave no answer with a basis: "keep
         # answers short" asked for nothing else, so a fixed line about the proposal (or why none was
@@ -550,13 +689,16 @@ def finish(state: TurnState, runtime: Runtime[TurnContext]) -> dict[str, Any]:
         return {"result": result, **pending}
     if answer is None:
         # The tool runs stay with "not covered", so a tool that failed or a call that was refused
-        # shows in Tool results rather than being hidden behind it (T9.3).
+        # shows in Tool results rather than being hidden behind it (T9.3). A turn that holds a
+        # client's thread had no search (T11.6a), so it says that instead; it says so whatever
+        # the client chose, as any call of the thread tool holds the thread.
+        search_off = bool(runtime.context.thread_calls)
         result = TurnResult(
             "no_sources",
-            config.NO_SOURCES_MESSAGE,
+            config.SEARCH_OFF_MESSAGE if search_off else config.NO_SOURCES_MESSAGE,
             searches=searches,
             tool_runs=runs,
-            code="answer.no_sources",
+            code="answer.search_off" if search_off else "answer.no_sources",
         )
         return {"result": result, **pending}
     if state.get("check_program", False) and guardrails.reads_as_program_schedule(answer):

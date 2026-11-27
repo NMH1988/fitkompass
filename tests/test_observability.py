@@ -387,7 +387,10 @@ def _paused_conversation() -> Conversation:
     conversation = Conversation()
     result = TurnResult("memory", "x", code="memory.proposed")
     conversation.run(
-        lambda _history, _domains: {"result": result, "proposal": "CANARY-PREF waiting"}
+        lambda _history, _domains, _threads: {
+            "result": result,
+            "proposal": "CANARY-PREF waiting",
+        }
     )
     return conversation
 
@@ -1116,14 +1119,64 @@ def _store_scenario(conn, codes: list[str]) -> list[Exception]:
     ai_consents.give(conn, "CANARY-GYM", "message_drafts", version)
     ai_consents.withdraw(conn, "CANARY-GYM", "message_drafts")
     ai_consents.give(conn, "CANARY-GYM", "message_drafts", version)
-    ai_consents.give(conn, "CANARY-GYM", "coach_thread", version, relationship)
-    ai_consents.is_given(conn, "CANARY-GYM", "coach_thread", version, relationship)
+    ai_consents.give(conn, "CANARY-GYM", "coach_thread", version, relationship, "chat")
+    ai_consents.is_given(conn, "CANARY-GYM", "coach_thread", version, relationship, "chat")
     since = datetime(2000, 1, 1, tzinfo=UTC)
     [own] = drafts.undrafted_messages(conn, "CANARY-GYM", relationship, since=since, limit=5)
     eaten = drafts.DraftedFood(
         date(2026, 10, 26), "lunch", 9001, "CANARY-FOOD drafted", 150.0, 571.9, 1.0, 2.0, 3.0, None
     )
     drafts.save_step(conn, "CANARY-GYM", own["id"], foods=[eaten])
+    # T11.6a: the coach's AI reads the thread with the chat use on, through the store and the
+    # tool (a refused message among them), then refused: another use, a stranger, a bad value.
+    from src import coach_thread
+    from src.tools import client_thread
+
+    chat_version = coach_thread.use_version("chat")
+    ai_consents.give(conn, "CANARY-GYM", "coach_thread", chat_version, relationship, "chat")
+    messages.send_message(conn, "CANARY-GYM", relationship, "CANARY-MESSAGE my knee is injured")
+    window = (datetime(2000, 1, 1, tzinfo=UTC), datetime(2100, 1, 1, tzinfo=UTC))
+    messages.thread_for_coach_ai(
+        conn,
+        "CANARY-COACH",
+        "CANARY-GYM",
+        "chat",
+        chat_version,
+        start=window[0],
+        end=window[1],
+        limit=50,
+    )
+    messages.is_open_for_coach_ai(conn, "CANARY-COACH", "CANARY-GYM", "chat", chat_version)
+    thread_refs = coach_clients.ClientRefs()
+    thread_refs.reference_for("CANARY-GYM", "CANARY-NAME")
+    thread_clients = coach_clients.CoachClients(
+        coach_id="CANARY-COACH",
+        open_store=lambda: contextlib.nullcontext(conn),
+        refs=thread_refs,
+        today=metrics.berlin_day,
+    )
+    thread_tools = registry.build_tools(None, clients=thread_clients)
+    for args in ({"client": "client-1"}, {"client": "CANARY-GYM"}, {"client": "client-9"}):
+        call = {"name": client_thread.THREAD_TOOL, "args": args, "id": "c", "type": "tool_call"}
+        registry.run_tool_call(thread_tools, call)
+    client_thread.is_open(thread_clients, "client-1")
+    for bad in (
+        lambda: messages.thread_for_coach_ai(
+            conn,
+            "other-coach",
+            "CANARY-GYM",
+            "reply",
+            chat_version,
+            start=window[0],
+            end=window[1],
+            limit=50,
+        ),
+        lambda: ai_consents.give(conn, "CANARY-GYM", "coach_thread", version, relationship, "x"),
+    ):
+        try:
+            bad()
+        except (values.StoreValueError, access.NotFound) as error:
+            errors.append(error)
     for bad in (
         lambda: ai_consents.give(conn, "CANARY-COACH", "message_drafts", version),
         lambda: drafts.undrafted_messages(conn, "CANARY-COACH", relationship, since=since, limit=5),
@@ -1173,8 +1226,8 @@ def test_no_record_or_error_holds_a_stored_value(store_conn, caplog):
     # T9.34: two refused lists; T11.3: four refused thread calls; T11.17: one code with no
     # profile; T11.8: five refused recipe calls (another user's edit, a food twice, a
     # stranger's rating, bad stars, a stranger's log); T11.5: four refused consent and
-    # draft calls.
-    assert len(errors) == 3 + 6 + 9 + 1 + 2 + 3 + 1 + 2 + 4 + 1 + 5 + 4
+    # draft calls; T11.6a: a stranger coach's AI read and an unknown use.
+    assert len(errors) == 3 + 6 + 9 + 1 + 2 + 3 + 1 + 2 + 4 + 1 + 5 + 4 + 2
     texts = [stream.getvalue(), caplog.text, *(str(e) for e in errors), *(repr(e) for e in errors)]
     # The three refused codes were logged, by reason only (T9.12, T11.17).
     assert stream.getvalue().count('"event": "invite_refused"') == 3

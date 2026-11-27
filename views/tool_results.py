@@ -2,7 +2,7 @@
 
 import streamlit as st
 
-from src.tools import coach_clients, meal_plan, registry
+from src.tools import client_thread, coach_clients, meal_plan, registry
 from src.tools.energy import TdeeResult
 from src.tools.food import FoodLookupResult, food_source_line
 from src.tools.meal_plan import MealPlanResult
@@ -18,6 +18,7 @@ TOOL_ICONS = {
     registry.MEAL_PLAN_TOOL: ":material/fact_check:",
     coach_clients.LIST_TOOL: ":material/groups:",
     coach_clients.WEEK_TOOL: ":material/calendar_month:",
+    client_thread.THREAD_TOOL: ":material/forum:",
     None: ":material/block:",
 }
 
@@ -129,6 +130,15 @@ def show_tool_run(run: registry.ToolRun, key: str, names: dict[str, str] | None 
         )
     elif isinstance(result, coach_clients.ClientWeekResult):
         table(tables.client_week_tool_rows(result, names, st.session_state["units"], lang()))
+    elif isinstance(result, client_thread.ThreadResult):
+        # The coach's own conversation with the client, as the model got it: plain text cells,
+        # never Markdown (docs/SECURITY.md).
+        st.caption(
+            t("coach_ai.week", start=result.week_start.isoformat(), end=result.week_end.isoformat())
+        )
+        st.dataframe(
+            tables.client_thread_tool_table(result, lang()), hide_index=True, width="stretch"
+        )
     else:
         # A refused or failed call: the fixed message the model got, never what it sent.
         st.caption(result.message)

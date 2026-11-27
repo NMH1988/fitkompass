@@ -113,6 +113,7 @@ def test_without_consent_a_no_message_reaches_the_model(store_conn, relationship
             "coach_thread",
             drafting.consent_version(),
             relationships[world.SHARED],
+            "chat",
         )
     elif given == "other_text":
         ai_consents.give(store_conn, world.SHARED, drafting.PURPOSE, "0123456789ab")

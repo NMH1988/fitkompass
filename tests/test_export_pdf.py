@@ -5,6 +5,7 @@ import dataclasses
 import io
 import os
 import re
+import unicodedata
 from datetime import date
 
 import pytest
@@ -14,7 +15,7 @@ from reportlab.pdfbase import pdfmetrics
 from src import chat, config, export_pdf, guardrails, i18n
 from src.guardrails import Concern
 from src.rag.sources import ARTICLE_CHANGES_NOTE, Source
-from src.tools import coach_clients, food_api, meal_plan, registry
+from src.tools import client_thread, coach_clients, food_api, meal_plan, registry
 from src.tools.energy import FORMULA_SOURCES, MACRO_SOURCES, TDEE_METHOD
 from src.tools.food import lookup_food_nutrition
 from src.tools.registry import (
@@ -524,7 +525,8 @@ def test_every_turn_kind_has_a_label():
 
 def test_tool_titles_match_the_tools():
     """Every tool, and a refused call (None), has a heading in the app and the PDF."""
-    coach = {coach_clients.LIST_TOOL, coach_clients.WEEK_TOOL}  # a coach's chat only (T9.17)
+    # A coach's chat only (T9.17, T11.6a).
+    coach = {coach_clients.LIST_TOOL, coach_clients.WEEK_TOOL, client_thread.THREAD_TOOL}
     assert set(registry.TOOL_TITLES) == {
         TDEE_TOOL,
         MACRO_TOOL,
@@ -989,3 +991,161 @@ def test_a_client_tool_result_gets_a_line_for_people(lang):
     texts = [item.getPlainText() for item in flowables]
     assert texts[1] == i18n.t("pdf.client_tool", lang)
     assert coach_clients.LIST_MESSAGE not in " ".join(texts)
+
+
+@pytest.mark.parametrize("lang", ["en", "de"])
+def test_a_thread_result_gets_the_line_for_people_and_no_message(lang):
+    """A client's thread (T11.6a) shows the fixed line in the PDF, never a message's text."""
+    export_pdf._register_fonts()
+    result = client_thread.ThreadResult(
+        status="ok",
+        message=client_thread.RESULT_MESSAGE,
+        client="client-1",
+        today=date(2026, 10, 28),
+        week_start=date(2026, 10, 26),
+        week_end=date(2026, 11, 1),
+        messages=[
+            client_thread.ThreadMessage(
+                side="client", day=date(2026, 10, 27), time_of_day="08:00", text="CANARY-PDF oats"
+            )
+        ],
+    )
+    run = registry.ToolRun(client_thread.THREAD_TOOL, "ok", result)
+    texts = [item.getPlainText() for item in export_pdf._tool_run_flowables(run, "metric", lang)]
+    assert texts[1] == i18n.t("pdf.client_tool", lang)
+    assert "CANARY-PDF" not in " ".join(texts)
+
+
+def test_a_coachs_answer_has_no_url_a_pdf_viewer_would_make_a_link():
+    """A scheme, "www." and an e-mail's "@" are broken by a word joiner, the text still readable."""
+    text = "see https://attacker.example/r?w=87.3, www.attacker.example and x@y.example"
+    shown = export_pdf.unlinked(text)
+    assert "https://" not in shown and "www." not in shown and "x@y" not in shown
+    assert shown.replace(export_pdf.WORD_JOINER, "") == text
+    # In the PDF the link's text and its broken URL stay readable.
+    line = export_pdf._inline_markdown(export_pdf.unlinked("[r](https://attacker.example/r)"))
+    assert line.replace(export_pdf.WORD_JOINER, "") == "r (https://attacker.example/r)"
+    assert "https://" not in line
+
+
+LINK_FORMS = (
+    "https&#58;//attacker.example/r",
+    "https&colon;//attacker.example/r",
+    "https\\://attacker.example/r",
+    "https:\x01//attacker.example/r",
+    "https:&shy;//attacker.example/r",
+    "https:&#173;//attacker.example/r",
+    "https:\u00ad//attacker.example/r",
+    "https:\u200b//attacker.example/r",
+    "www&#46;attacker.example",
+    "www\u00ad.attacker.example",
+    "www.attacker.example",
+    "x&#64;attacker.example",
+    "[r](https://attacker.example/r)",
+    # A combining mark beside the colon or the dot: a grapheme joiner, a variation selector.
+    "https:\u034f//attacker.example/r",
+    "https\u034f://attacker.example/r",
+    "https:\ufe0f//attacker.example/r",
+    "www\u034f.attacker.example",
+    "www\ufe0f.attacker.example",
+    "x\u034f@attacker.example",
+)
+
+
+def _before_credits(drawn: str) -> str:
+    """Return the drawn text before the credits, which are the app's own and keep their links."""
+    return drawn.split(i18n.t("pdf.credits", "en"))[0]
+
+
+def _drawn(result: chat.TurnResult, unlink: bool) -> str:
+    """Return the text a session PDF with this turn draws before its credits, as extracted."""
+    pdf = export_pdf.build_summary_pdf([("Q?", result)], None, "metric", unlink=unlink)
+    return _before_credits(pdf_text(pdf))
+
+
+def _no_link(text: str) -> None:
+    """Assert the text holds no start of a link a PDF viewer would follow."""
+    # A combining mark is read as if absent, as a viewer may skip it when it looks for a link.
+    text = "".join(c for c in text if unicodedata.category(c) not in ("Mn", "Me"))
+    for start in ("https://", "www.attacker", "x@attacker"):
+        assert start not in text, start
+
+
+@pytest.mark.parametrize("form", LINK_FORMS)
+def test_a_coachs_pdf_draws_no_link_in_any_encoded_form(form):
+    """Escapes, references, control and format characters rebuild no link in the drawn text."""
+    drawn = _drawn(chat.TurnResult("answer", f"see {form} now"), unlink=True)
+    _no_link(drawn)
+    assert "attacker" in drawn
+    # The word joiners are drawn: no box for a missing glyph.
+    assert export_pdf.MISSING not in drawn
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "see https:\n//attacker.example/r",
+        "see www.\nattacker.example",
+        "see ww\nw.attacker.example",
+        "see ww-\nw.attacker.example",
+    ],
+)
+def test_a_coachs_pdf_breaks_a_link_split_over_two_lines(answer):
+    """A scheme or a "www." split over two answer lines is broken on each line."""
+    drawn = _drawn(chat.TurnResult("answer", answer), unlink=True)
+    # Joined as a viewer may join them, a hyphen at a line's end taken out.
+    joined = re.sub(r"-?\s", "", drawn)
+    _no_link(joined)
+    assert "attacker" in joined
+
+
+def test_a_coachs_pdf_keeps_letters_and_readable_text():
+    """German letters, also one written with a combining mark, and plain words stay as written."""
+    answer = "Grüße an Jürgen: Schritt 1/2 now. Fertig."
+    decomposed = answer.replace("ü", "u\u0308", 1)
+    drawn = _drawn(chat.TurnResult("answer", decomposed), unlink=True)
+    assert answer in drawn.replace(export_pdf.WORD_JOINER, "")
+
+
+def test_a_guests_pdf_keeps_its_urls():
+    """Outside a coach's chat the answer's URLs are drawn as written."""
+    drawn = _drawn(chat.TurnResult("answer", "see https://example.org/x"), unlink=False)
+    assert "https://example.org/x" in drawn
+
+
+def test_a_coachs_pdf_draws_no_link_in_a_meal_plan_food_name():
+    """A food name the model sent to the meal plan tool is drawn with its link broken."""
+    plan = meal_plan.evaluate_meal_plan(
+        [{"food": "https://attacker.example/r?w=87.3", "grams": 100}],
+        registry.macro_targets(PROFILE).targets,
+    )
+    run = ToolRun(registry.MEAL_PLAN_TOOL, plan.status, plan)
+    result = chat.TurnResult("answer", "Checked.", tool_runs=(run,))
+    _no_link(_drawn(result, unlink=True))
+    assert "https://attacker.example" in _drawn(result, unlink=False)
+
+
+def test_a_coachs_pdf_keeps_the_apps_own_source_and_licence_links_whole():
+    """The source line, its licence link and the credits are the app's own: links as written."""
+    result = _answer("Spread it over meals [S1]; see https://attacker.example/r", _card(HMB))
+    pdf = export_pdf.build_summary_pdf(
+        [("Q?", result)], None, "metric", MANIFEST, TODAY, unlink=True
+    )
+    drawn = pdf_text(pdf)
+    assert f"Licensed under {HMB.license} ({HMB.license_url})" in drawn
+    # The cited article's URL on its source line in the turn, not only in the credits.
+    assert HMB.url in _before_credits(drawn)
+    _no_link(_before_credits(drawn).replace(HMB.url, "").replace(HMB.license_url, ""))
+
+
+def test_a_build_that_fails_leaves_the_switch_off(monkeypatch):
+    """The unlink switch is reset when a coach's build raises, so a later build keeps its URLs."""
+
+    def broken(*_args, **_kwargs):
+        """Fail the way a layout error would."""
+        raise RuntimeError("layout failed")
+
+    monkeypatch.setattr(export_pdf, "_story", broken)
+    with pytest.raises(export_pdf.PdfExportError):
+        export_pdf.build_summary_pdf([], None, "metric", unlink=True)
+    assert export_pdf._UNLINK.get() is False

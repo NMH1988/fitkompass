@@ -28,6 +28,12 @@ coach's answer on the card resumes it with `Command(resume=...)` (`Conversation.
 checks the text again and writes it through the caller's `save`, Discard writes nothing. Either
 way the state's proposal is then replaced with `config.ANSWERED_PROPOSAL`, so the thread's latest
 state holds no proposed text; "New chat" deletes a pending one with the thread.
+
+Beside each kept question the thread also keeps the references of the clients whose thread
+(`get_client_thread`, T11.6a) the turn's answer may hold: the turn's own thread results, and the
+marks of the earlier questions the model saw, as an answer built on an earlier one can repeat what
+it said. A later turn checks each marked client again before every model call and leaves out the
+questions and answers whose client's thread may no longer reach a model (`src/agent/graph.py`).
 """
 
 import logging
@@ -63,6 +69,9 @@ class ConversationState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
     # The domain of each kept question, by its message id (T10.5): replaced whole on each update.
     domains: NotRequired[dict[str, Domain]]
+    # The client references whose thread each kept question's answer may hold, by the question's
+    # message id (T11.6a): replaced whole on each update, like domains.
+    threads: NotRequired[dict[str, list[str]]]
     # The latest turn's proposed preference while it waits for the coach (T9.7), then
     # config.ANSWERED_PROPOSAL; None after a turn that proposed nothing.
     proposal: NotRequired[str | None]
@@ -74,9 +83,11 @@ class ConversationState(TypedDict):
 class ConversationContext:
     """What one turn of the conversation runs, and where its result goes (never into state)."""
 
-    # Runs the chat turn's graph on the thread's messages and their questions' domains (T10.5), and
-    # returns its output (TurnOutput).
-    turn: Callable[[list[AnyMessage], Mapping[str, Domain]], Mapping[str, Any]]
+    # Runs the chat turn's graph on the thread's messages, their questions' domains (T10.5) and
+    # client thread marks (T11.6a), and returns its output (TurnOutput).
+    turn: Callable[
+        [list[AnyMessage], Mapping[str, Domain], Mapping[str, Sequence[str]]], Mapping[str, Any]
+    ]
     # The turn's result: its tool runs hold tool results, so it stays out of the checkpointer.
     results: list[TurnResult] = field(default_factory=list)
     # An error the turn raised, raised again by Conversation.run() once the run is over.
@@ -106,7 +117,11 @@ def drops_answer(answer: str) -> bool:
 def turn(state: ConversationState, runtime: Runtime[ConversationContext]) -> dict[str, Any]:
     """Run the chat turn on the thread; keep its question and answer only if it was answered."""
     try:
-        output = runtime.context.turn(list(state["messages"]), dict(state.get("domains") or {}))
+        output = runtime.context.turn(
+            list(state["messages"]),
+            dict(state.get("domains") or {}),
+            {key: tuple(refs) for key, refs in (state.get("threads") or {}).items()},
+        )
     except GraphBubbleUp:
         # LangGraph's own signals (an interrupt() pause, T9.7) must reach the graph unchanged.
         raise
@@ -138,7 +153,14 @@ def turn(state: ConversationState, runtime: Runtime[ConversationContext]) -> dic
     # answer's question is not kept, so neither is its domain.
     messages[0].id = str(uuid.uuid4())
     domains = {**(state.get("domains") or {}), messages[0].id: output.get("domain", "unknown")}
-    return {**update, "messages": messages, "domains": domains}
+    kept_update = {**update, "messages": messages, "domains": domains}
+    marks = list(output.get("threads") or [])
+    if marks or "threads" in state:
+        threads = dict(state.get("threads") or {})
+        if marks:
+            threads[messages[0].id] = marks
+        kept_update["threads"] = threads
+    return kept_update
 
 
 def after_turn(state: ConversationState) -> str:
@@ -170,7 +192,9 @@ def approve(state: ConversationState, runtime: Runtime[ConversationContext]) -> 
     return {"proposal": config.ANSWERED_PROPOSAL, "awaiting": False}
 
 
-def _no_turn(_: list[AnyMessage], __: Mapping[str, Domain]) -> Mapping[str, Any]:
+def _no_turn(
+    _: list[AnyMessage], __: Mapping[str, Domain], ___: Mapping[str, Sequence[str]]
+) -> Mapping[str, Any]:
     """Stand for the turn while the graph resumes from `approve`, which never runs a turn."""
     raise RuntimeError("A resumed conversation runs no turn.")
 
@@ -194,7 +218,14 @@ def forget(state: ConversationState) -> dict[str, Any]:
         return {}
     kept = {message.id for message in messages[start:]}
     domains = {key: value for key, value in (state.get("domains") or {}).items() if key in kept}
-    return {"messages": [RemoveMessage(id=message.id) for message in old], "domains": domains}
+    update: dict[str, Any] = {
+        "messages": [RemoveMessage(id=message.id) for message in old],
+        "domains": domains,
+    }
+    if "threads" in state:
+        threads = state.get("threads") or {}
+        update["threads"] = {key: refs for key, refs in threads.items() if key in kept}
+    return update
 
 
 @cache
@@ -272,7 +303,10 @@ class Conversation:
 
     def run(
         self,
-        run_turn: Callable[[list[AnyMessage], Mapping[str, Domain]], Mapping[str, Any]],
+        run_turn: Callable[
+            [list[AnyMessage], Mapping[str, Domain], Mapping[str, Sequence[str]]],
+            Mapping[str, Any],
+        ],
         turn_id: str = "",
         prompts: Mapping[str, str] | None = None,
     ) -> TurnResult:

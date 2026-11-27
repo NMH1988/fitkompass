@@ -20,7 +20,8 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from src import config
 from src.profile import UserProfile
 from src.prompt_data import escape_prompt_data
-from src.tools import coach_clients
+from src.tools import client_thread, coach_clients
+from src.tools.client_thread import ThreadResult
 from src.tools.coach_clients import (
     ClientListResult,
     ClientNotice,
@@ -103,6 +104,8 @@ TOOL_TITLES: dict[str | None, str] = {
     # A coach's chat only (T9.17).
     coach_clients.LIST_TOOL: "Your clients this week",
     coach_clients.WEEK_TOOL: "A client's week",
+    # A coach's chat only (T11.6a).
+    client_thread.THREAD_TOOL: "A client's messages",
     None: "Tool call not run",
 }
 
@@ -140,6 +143,7 @@ ToolResult = (
     | ClientListResult
     | ClientWeekResult
     | ClientNotice
+    | ThreadResult
 )
 
 
@@ -190,6 +194,7 @@ def build_tools(
     food_api: FoodSearch | None = None,
     client_names: Sequence[str] = (),
     clients: CoachClients | None = None,
+    api_open: Callable[[], bool] | None = None,
 ) -> dict[str, StructuredTool]:
     """Return the tools by name, bound to this profile (or None) and a coach's clients (T9.17)."""
     # `table` replaces the committed foods table (tests); the model can never set it. Run the
@@ -199,7 +204,8 @@ def build_tools(
     # key, the evaluation run, the tests) keeps the table alone. The tools are built once per turn,
     # so the budget bounds one turn's searches. The meal plan tool never asks the API: T9.9 limits
     # it to the chat's food tool. `client_names` are a coach's clients' names (T9.7): a food name
-    # holding one is not sent to the API.
+    # holding one is not sent to the API. `api_open` is asked at each lookup (T11.6a): False
+    # while the turn holds a client's thread, as consent (b) names no USDA, so the table alone.
     budget = TurnBudget()
 
     def tdee() -> TdeeResult | ToolNotice:
@@ -212,7 +218,8 @@ def build_tools(
 
     def food(food: str, grams: float) -> FoodLookupResult:
         """Return the nutrients of the food for the grams: the table, then the API if not found."""
-        return lookup_with_api(food, grams, food_api, budget, table, client_names)
+        api = food_api if api_open is None or api_open() else None
+        return lookup_with_api(food, grams, api, budget, table, client_names)
 
     def meal_plan(items: list[dict]) -> MealPlanResult | ToolNotice:
         """Return the foods' totals against the profile's daily targets, or "profile needed"."""
@@ -255,8 +262,10 @@ def build_tools(
         ),
     }
     if clients is not None:
-        # Only a coach's chat reads the coach's clients, through the coach's session (T9.17).
+        # Only a coach's chat reads the coach's clients, through the coach's session (T9.17), and
+        # their threads, with each client's consent (b) for the chat (T11.6a).
         tools.update(coach_clients.build_tools(clients, _no_arguments_message))
+        tools[client_thread.THREAD_TOOL] = client_thread.build_tool(clients)
     return tools
 
 
@@ -268,6 +277,7 @@ _INVALID_MESSAGES: dict[str, Callable[[ValidationError], str]] = {
     MEAL_PLAN_TOOL: invalid_meal_plan_message,
     coach_clients.LIST_TOOL: _no_arguments_message,
     coach_clients.WEEK_TOOL: coach_clients.invalid_week_message,
+    client_thread.THREAD_TOOL: client_thread.invalid_thread_message,
 }
 
 
