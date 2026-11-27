@@ -28,6 +28,7 @@ from src.tools import coach_clients, registry
 from tests import store_world as world
 from tests import test_agent_clients as clients_tests
 from tests import test_agent_drafts as drafts_tests
+from tests import test_agent_media_drafts as media_tests
 from tests import test_agent_review as review_tests
 from tests import test_observability as obs
 from tests.fakes import patch_config, tool_reply
@@ -1276,3 +1277,37 @@ def test_a_demo_coach_turn_sends_the_client_tools_results_unmasked(
     assert '"args": {"client": "client-1"}' in searched
     assert "571.5" in searched
     assert FAKE_LANGSMITH_KEY not in searched
+
+
+def test_a_photo_s_run_and_decision_send_nothing_even_with_the_demo_gate_open(
+    store_conn, demo_traced
+):
+    """The file, its description and the cards reach no trace, unmasked or masked (T11.10)."""
+    world.build(store_conn)
+    media_tests.ai_consents.give(
+        store_conn, world.SHARED, media_tests.media.PURPOSE, media_tests.media.consent_version()
+    )
+    assert tracing.demo_gate_open()
+    first = media_tests._media_model(media_tests.DESCRIPTION)
+    draft = media_tests._draft_model(media_tests.ONE_FOOD)
+    drafter, started = media_tests._start(first, draft)
+    assert started.outcome == "pending"
+    decided = drafter.decide(media_tests._context(first, draft), [{"action": "approve"}])
+    assert decided.outcome == "done" and len(first.calls) == 1 and len(draft.calls) == 1
+    assert demo_traced.runs() == []
+    # The control: the same fake called outside the workflow is traced, unmasked, with its text,
+    # so the empty list above is the workflow's doing, not a session that records nothing.
+    control = media_tests._media_model("CANARY-CONTROL two eggs")
+    control.invoke("CANARY-CONTROL question")
+    sent = json.dumps(demo_traced.runs())
+    assert "CANARY-CONTROL two eggs" in sent
+
+
+def test_untraced_turns_tracing_off_only_inside_its_block(traced):
+    """A call inside untraced() sends nothing; the next call outside it is traced (masked)."""
+    model = media_tests._media_model("inside", "outside")
+    with tracing.untraced():
+        model.invoke("first")
+    assert traced.runs() == []
+    model.invoke("second")
+    assert traced.runs()

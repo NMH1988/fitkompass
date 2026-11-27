@@ -269,3 +269,40 @@ def test_a_step_for_a_reused_message_id_is_refused(conn):
     assert conn.execute("SELECT count(*) FROM message_drafts").fetchone()[0] == 0
     _, sent = _as_read(conn, message)
     assert drafts.save_step(conn, world.SHARED, message, foods=[FOOD], created_at=sent)
+
+
+# --- T11.10: entries drafted from a photo or a voice note -------------------------------------
+
+
+def test_entries_from_a_photo_or_voice_note_are_logged_with_no_mark(conn):
+    """save_entries writes the gymer's approved entries and refers to no message."""
+    before = _logged(conn)
+    entries = {"foods": [FOOD], "weights": [WEIGHT], "workouts": [WORKOUT]}
+    assert drafts.save_entries(conn, world.SHARED, **entries) == 3
+    assert _logged(conn) == tuple(count + 1 for count in before)
+    assert conn.execute("SELECT count(*) FROM message_drafts").fetchone()[0] == 0
+    row = conn.execute(
+        "SELECT from_suggestion, from_recipe FROM meal_items WHERE user_id = ? ORDER BY id DESC",
+        (world.SHARED,),
+    ).fetchone()
+    assert tuple(row) == (0, None)
+
+
+def test_entries_with_a_bad_value_write_nothing(conn):
+    """A value the record checks refuse stops save_entries before anything is written."""
+    before = _logged(conn)
+    with pytest.raises(values.StoreValueError):
+        drafts.save_entries(
+            conn, world.SHARED, foods=[FOOD], weights=[drafts.DraftedWeight(9.0, world.DAY)]
+        )
+    assert _logged(conn) == before
+
+
+@pytest.mark.parametrize("who", [world.COACH_A, world.MISSING, "", None, 7])
+def test_entries_for_anyone_but_a_gymer_are_not_found(conn, who):
+    """A coach, a missing user or a bad ID gets NotFound, and nothing is written."""
+    before = _logged(conn)
+    with pytest.raises(NotFound):
+        drafts.save_entries(conn, who, foods=[FOOD])
+    assert _logged(conn) == before
+    assert _count(conn, "meal_items", world.COACH_A) == 0

@@ -261,6 +261,32 @@ class ScriptedTranslator(BaseChatModel):
         return RunnableLambda(reply)
 
 
+class ScriptedMediaModel(BaseChatModel):
+    """The first call's model for a photo or a voice note (T11.10): scripted texts, and records."""
+
+    # Each reply in order (a text, or an exception to raise); with none left it says nothing.
+    replies: list[str | Exception] = Field(default_factory=list)
+    calls: list[list[BaseMessage]] = Field(default_factory=list)
+    model_name: str = config.PHOTO_MODEL
+    # Called after each request is recorded, e.g. to withdraw a consent between the two calls.
+    on_call: Any = None
+
+    @property
+    def _llm_type(self) -> str:
+        """Name the fake for langchain."""
+        return "scripted-media"
+
+    def _generate(self, messages: list[BaseMessage], stop: Any = None, **kwargs: Any) -> ChatResult:
+        """Record the request, then give the next scripted text (or raise it)."""
+        self.calls.append(list(messages))
+        if self.on_call is not None:
+            self.on_call()
+        reply = self.replies.pop(0) if self.replies else ""
+        if isinstance(reply, Exception):
+            raise reply
+        return ChatResult(generations=[ChatGeneration(message=AIMessage(reply))])
+
+
 class FakeJudgeChat(BaseChatModel):
     """A judge client for DeepEval's metrics (T9.10): fills any schema asked for, and records."""
 

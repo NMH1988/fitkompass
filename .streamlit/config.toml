@@ -6,6 +6,10 @@
 # network could open the app and spend the key. A public deployment may change it only together
 # with one of the options in docs/DEPLOYMENT.md (T1.7).
 address = "localhost"
+# The largest upload, in MB: the meal photo (5 MB) and the voice note (T11.10) are the app's only
+# uploads; the server refuses a bigger body while it streams, before it reaches the app.
+# config.UPLOAD_MAX_MB says the same (tests/test_media.py).
+maxUploadSize = 6
 
 [browser]
 # No usage events, so page views do not send visitors' IPs to Streamlit's metrics host (T1.7).

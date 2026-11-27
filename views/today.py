@@ -14,7 +14,7 @@ from src import account as accounts
 from src import config, diary, metrics, units
 from src.store import records
 from src.tools.food import food_names
-from views import account, header, my_data, suggestions, tables
+from views import account, header, media_drafts, my_data, suggestions, tables
 from views.text import label_of, lang, t
 
 URL_PATH = "today"
@@ -243,6 +243,7 @@ def page() -> None:
             # The first Save on My profile carries the opt-in tick and the 18+ check, so no food
             # or weight is stored before them (T9.13; the diary checks it too).
             st.info(t("today.profile_first"), icon=":material/person:")
+            media_drafts.standing_consent(user["id"])
             return
         flash = st.session_state.pop(FLASH_KEY, None)
         if flash is not None:
@@ -273,6 +274,8 @@ def page() -> None:
         # The foods the gymer's coach suggests, each logged in one click (T9.34).
         suggestions.gymer_section(user, day, _write)
         _food_form(user, day, names)
+        # A photo or a voice note to draft entries the gymer approves, with consent (c) (T11.10).
+        media_drafts.section(user, day)
         try:
             with accounts.open_store(account.store_path()) as conn:
                 items = diary.day_items(conn, user["id"], day)

@@ -148,6 +148,27 @@ NEW_NAMES = frozenset(
         "DRAFT_MAX_SET_GROUPS",
         "DRAFT_MAX_SETS_PER_GROUP",
         "DRAFT_MAX_STEPS",
+        # T11.10: a photo or a voice note to draft log entries.
+        "PHOTO_MODEL",
+        "VOICE_MODEL",
+        "MEDIA_MAX_TOKENS",
+        "MEDIA_PROVIDERS",
+        "PHOTO_MAX_MB",
+        "PHOTO_MAX_BYTES",
+        "PHOTO_TYPES",
+        "PHOTO_MAX_PIXELS",
+        "PHOTO_MAX_SIDE_PX",
+        "PHOTO_JPEG_QUALITY",
+        "VOICE_MAX_SECONDS",
+        "VOICE_SAMPLE_RATE",
+        "VOICE_MAX_BYTES",
+        "MEDIA_TEXT_MAX_CHARS",
+        "PHOTO_PROMPT_PATH",
+        "VOICE_PROMPT_PATH",
+        "MEDIA_PROMPT_MISSING_MESSAGE",
+        "MEDIA_MAX_STEPS",
+        "UPLOAD_MAX_MB",
+        "UPLOAD_SPOOL_MAX_BYTES",
     }
 )
 
