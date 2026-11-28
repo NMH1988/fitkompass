@@ -467,6 +467,17 @@ def test_no_close_match_in_the_api_is_not_found_with_its_suggestions():
     assert "USDA FoodData Central API" in result.message
 
 
+def test_an_api_name_sharing_only_a_cooking_word_is_no_match():
+    """The API's names get the table's word check: "boiled eggs" is not a boiled kale (T11.22)."""
+    kale = "Kale, frozen, cooked, boiled, drained, without salt"
+    answer = {"foods": [_api_food(401, kale, "SR Legacy")]}
+    search = FakeSearch(ApiSearch(None, food_api.parse_search(answer), 1))
+    result = lookup("boiled eggs", 100, search, TurnBudget(), FOODS)
+    assert (result.status, result.api_code, result.matched_name) == ("not_found", "no_match", None)
+    assert result.alternatives == [kale]
+    assert search.names  # the table's "not found" still asked the API
+
+
 @pytest.mark.parametrize("code", ["timeout", "unavailable", "rate_limited", "bad_response"])
 def test_an_api_failure_keeps_the_tables_not_found(code):
     """A failed search gives the table's "not found" and its code; the turn goes on."""

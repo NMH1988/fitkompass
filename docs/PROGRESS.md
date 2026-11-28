@@ -22,6 +22,7 @@ Keep the entry short and record what the code does not say. `tests/test_docs_lay
 ---
 
 - [2026-11-27 · T11.24 Plan: a client's name the coach types is read as the chat's reference · NMH1988/fitkompass#61 (closes NMH1988/fitkompass#60)](progress/2026-11-27-T11.24.md)
+- [2026-11-27 · T11.22 The food matcher: no match on a word that is not the food · NMH1988/fitkompass#57 (closes NMH1988/fitkompass#53)](progress/2026-11-27-T11.22.md)
 - [2026-11-27 · T11.6a Records: status done after the merge · NMH1988/fitkompass#59 (closes NMH1988/fitkompass#58)](progress/2026-11-27-T11.6a.md)
 - [2026-11-25 · T11.6a The client's thread in the coach's AI chat, part 1: the tool, consent (b)'s switches and the open chat · NMH1988/fitkompass#47 (closes NMH1988/fitkompass#13)](progress/2026-11-25-T11.6a.md)
 - [2026-11-27 · T11.10 Records: status done after the merge · NMH1988/fitkompass#56 (closes NMH1988/fitkompass#55)](progress/2026-11-27-T11.10.md)

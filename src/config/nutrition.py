@@ -89,8 +89,34 @@ FOOD_MAX_NAME_CHARS = 100
 # Grams per lookup; below 0.1 g every value rounds to zero.
 FOOD_MIN_GRAMS = 0.1
 FOOD_MAX_GRAMS = 2000
-# A food scoring at least this is taken as the match; tried on the real table in T4.3.
+# A food scoring at least this is taken as the match if it also passes the word check below;
+# tried on the real table in T4.3.
 FOOD_MATCH_MIN_SCORE = 80
+# A name that scores enough is a match only if it also shares a word with the query that names the
+# food: one shared cooking word gave "boiled eggs" a frozen boiled kale, as the score counts every
+# shared word alike (T11.22). These words say how a food is prepared, its state or a part, never
+# which food, so a query word among them is not counted ("meat" alone matched a chicken wing).
+FOOD_PREPARATION_WORDS = frozenset(
+    {
+        "boiled",
+        "cooked",
+        "raw",
+        "fried",
+        "grilled",
+        "baked",
+        "roasted",
+        "steamed",
+        "frozen",
+        "drained",
+        "fresh",
+        "dried",
+        "meat",
+        "skin",
+    }
+)
+# USDA names give the food before these words and an ingredient or a note after them ("Anchovies,
+# canned in olive oil, with salt"), so only the words before the first of them name the food.
+FOOD_QUALIFIER_WORDS = frozenset({"with", "in", "without", "and"})
 # Foods scoring at least this are offered as alternatives or "did you mean" suggestions.
 FOOD_SUGGESTION_MIN_SCORE = 60
 FOOD_MAX_ALTERNATIVES = 3

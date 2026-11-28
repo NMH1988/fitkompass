@@ -212,7 +212,7 @@ Deadline: **2026-11-02** (Sprint 2, already submitted by the owner, 2026-10-28).
 | [T11.15](tickets/T11.15.md) | NMH1988/fitkompass#30 | (P2) A suggested foods draft from the client's messages | M | T11.6, O25 | - | todo |
 | [T11.16](tickets/T11.16.md) | NMH1988/fitkompass#31 | (P2) Client notes: the coach's AI remembers what a client said, with the coach's approval and the client's consent | L | T11.6, O25 | - | todo |
 | [T11.18](tickets/T11.18.md) | NMH1988/fitkompass#42 | (P2) Entries of the same food grouped by meal on Today | S | T11.5 (order only) | - | todo |
-| [T11.22](tickets/T11.22.md) | NMH1988/fitkompass#53 | (P1) The food matcher: no match on a word that is not the food | S | T11.10 (order only) | - | todo |
+| [T11.22](tickets/T11.22.md) | NMH1988/fitkompass#53 | (P1) The food matcher: no match on a word that is not the food | S | T11.10 (order only) | - | done |
 | [T11.23](tickets/T11.23.md) | NMH1988/fitkompass#54 | (P1) A voice note's speech always reaches the guard, with NONE only for no speech | S | T11.10, O27 | - | todo |
 | [T11.19](tickets/T11.19.md) | NMH1988/fitkompass#48 | (P2) Draft cards: one meal slot for all the food cards, and the refused card named | S | T11.10 (order only) | - | todo |
 | [T11.20](tickets/T11.20.md) | NMH1988/fitkompass#49 | (P1) A larger USDA food table: SR Legacy and FNDDS beside Foundation Foods | M | T11.10, T11.22 (order only), O26 | - | todo |
