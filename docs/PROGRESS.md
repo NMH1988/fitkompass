@@ -21,6 +21,7 @@ Keep the entry short and record what the code does not say. `tests/test_docs_lay
 
 ---
 
+- [2026-11-28 · T11.25 Plan: a comment beside a recipe's stars, and the coach's marks on Today · NMH1988/fitkompass#63 (closes NMH1988/fitkompass#62)](progress/2026-11-28-T11.25.md)
 - [2026-11-27 · T11.22 The food matcher: no match on a word that is not the food · NMH1988/fitkompass#57 (closes NMH1988/fitkompass#53)](progress/2026-11-27-T11.22.md)
 - [2026-11-27 · T11.6a Records: status done after the merge · NMH1988/fitkompass#59 (closes NMH1988/fitkompass#58)](progress/2026-11-27-T11.6a.md)
 - [2026-11-25 · T11.6a The client's thread in the coach's AI chat, part 1: the tool, consent (b)'s switches and the open chat · NMH1988/fitkompass#47 (closes NMH1988/fitkompass#13)](progress/2026-11-25-T11.6a.md)
