@@ -401,8 +401,8 @@ def lookup(
     data_types = {found.food.description: found.data_type for found in search.foods}
     ranked = _rank(_normalise(query), [found.food for found in search.foods])
     limit = config.FOOD_MAX_ALTERNATIVES
-    if not ranked or ranked[0][1] < config.FOOD_MATCH_MIN_SCORE:
-        suggestions = [match.description for match, _ in ranked[:limit]] or local.alternatives
+    if not ranked or not ranked[0].is_match:
+        suggestions = [r.food.description for r in ranked[:limit]] or local.alternatives
         message = _NO_MATCH
         if suggestions:
             message += " Did you mean one of the alternatives? They are the closest names found."
@@ -414,8 +414,8 @@ def lookup(
             source=config.FOOD_API_NO_MATCH_SOURCE,
             api_code="no_match",
         )
-    best = ranked[0][0]
-    others = [match.description for match, _ in ranked[1 : 1 + limit]]
+    best = ranked[0].food
+    others = [r.food.description for r in ranked[1 : 1 + limit]]
     return _found(best, local.grams, others, data_types[best.description])
 
 

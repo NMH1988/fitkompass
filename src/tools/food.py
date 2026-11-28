@@ -1,8 +1,10 @@
 """lookup_food_nutrition: nutrients of a food and amount, from the USDA Foundation Foods table.
 
 The table (`data/usda_foods.csv`) is made by `scripts/prepare_usda.py` from USDA FoodData Central
-(CC0 1.0; docs/SOURCES.md #21). The chat's tool (`lookup_food_nutrition`) matches food names with
-rapidfuzz, so small typos and plurals still find the food; the matched USDA name and close
+(CC0 1.0; docs/SOURCES.md #21). The chat's tool (`lookup_food_nutrition`) scores food names with
+rapidfuzz after folding case, punctuation and simple plurals, and takes a name as the match only
+when it also shares a word with the query that names the food (`_names_the_food()`); a misspelt
+name is usually "not found", with the closest names as suggestions. The matched USDA name and close
 alternatives are always returned, so the model and the user can see what was looked up. The Food
 lookup tab's dropdown (`food_names`, `lookup_chosen_food`, T4.8) takes only the table's own names
 and looks them up exactly, with no alternatives.
@@ -13,7 +15,7 @@ import re
 from collections.abc import Sequence
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal, cast
+from typing import Literal, NamedTuple, cast
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from rapidfuzz import fuzz, process, utils
@@ -219,16 +221,42 @@ def _score(query: str, choice: str, **_: object) -> float:
     return (fuzz.WRatio(query, choice) + fuzz.token_set_ratio(query, choice)) / 2
 
 
-def _rank(query: str, foods: Sequence[Food]) -> list[tuple[Food, float]]:
-    """Return the foods scoring at least the suggestion threshold with their scores, best first."""
-    # The score alone favours short names too much ("milk" scores higher on "Yogurt, plain, whole
-    # milk" than on "Milk, whole, 3.25% milkfat"), so the matches are ordered by these, in turn:
-    # 1. the plain food before a processed form the query does not name (FORM_WORDS): "Nuts,
+def _names_the_food(query_words: set[str], name: str) -> bool:
+    """Return whether a query word naming a food is among the name's words before a qualifier."""
+    # `name` is normalised. Preparation words (config.FOOD_PREPARATION_WORDS) never name the food,
+    # and what follows "with", "in", "without" or "and" is an ingredient or a note, not the food:
+    # "olive oil" is not "Anchovies, canned in olive oil", "boiled eggs" not "Kale, ..., boiled".
+    food_words = query_words - config.FOOD_PREPARATION_WORDS
+    for word in name.split():
+        if word in config.FOOD_QUALIFIER_WORDS:
+            return False
+        if word in food_words:
+            return True
+    return False
+
+
+class _Ranked(NamedTuple):
+    """One food of a ranking, and whether it counts as the match (score and word check passed)."""
+
+    food: Food
+    is_match: bool
+
+
+def _rank(query: str, foods: Sequence[Food]) -> list[_Ranked]:
+    """Return the foods scoring at least the suggestion threshold, the matches first, best first."""
+    # A match scores at least FOOD_MATCH_MIN_SCORE and names the food (_names_the_food()). The score
+    # alone favours short names too much ("milk" scores higher on "Yogurt, plain, whole milk" than
+    # on "Milk, whole, 3.25% milkfat"), so the foods are ordered by these, in turn:
+    # 1. the matches first;
+    # 2. a name that names the food before one that does not, so "boiled eggs", which matches
+    #    nothing, suggests the egg names before the boiled kale;
+    # 3. a name scoring at least the match threshold before one that does not;
+    # 4. the plain food before a processed form the query does not name (FORM_WORDS): "Nuts,
     #    almonds" before "Flour, almond" and "Almond butter" for "almonds";
-    # 2. a name whose head (before the first comma) is made only of query words, since USDA names
+    # 5. a name whose head (before the first comma) is made only of query words, since USDA names
     #    lead with the food itself: for "white rice", "Rice, white" is rice, "Flour, rice" flour;
-    # 3. the higher token_set_ratio (how fully the query words appear in the name);
-    # 4. the higher score, then the shorter, plainer name.
+    # 6. the higher token_set_ratio (how fully the query words appear in the name);
+    # 7. the higher score, then the shorter, plainer name.
     names = [_normalise(f.description) for f in foods]
     hits = process.extract(
         query,
@@ -238,12 +266,21 @@ def _rank(query: str, foods: Sequence[Food]) -> list[tuple[Food, float]]:
         score_cutoff=config.FOOD_SUGGESTION_MIN_SCORE,
     )
     query_words = set(query.split())
+    checked = [(hit, _names_the_food(query_words, hit[0])) for hit in hits]
 
-    def order(hit: tuple[str, float, int]) -> tuple[bool, bool, bool, int, float, int]:
-        """Sort key for one hit: matches first, then the preferences listed above."""
-        name, score, index = hit
+    def is_match(score: float, names_food: bool) -> bool:
+        """Return whether a name with this score and word check counts as the match."""
+        return names_food and score >= config.FOOD_MATCH_MIN_SCORE
+
+    def order(
+        item: tuple[tuple[str, float, int], bool],
+    ) -> tuple[bool, bool, bool, bool, bool, int, float, int]:
+        """Sort key for one hit: the preferences listed above, in turn."""
+        (name, score, index), names_food = item
         head = set(_normalise(foods[index].description.split(",")[0]).split())
         return (
+            not is_match(score, names_food),
+            not names_food,
             score < config.FOOD_MATCH_MIN_SCORE,
             bool((set(name.split()) & FORM_WORDS) - query_words),
             not head <= query_words,
@@ -252,7 +289,10 @@ def _rank(query: str, foods: Sequence[Food]) -> list[tuple[Food, float]]:
             len(name),
         )
 
-    return [(foods[index], score) for _, score, index in sorted(hits, key=order)]
+    return [
+        _Ranked(foods[index], is_match(score, names_food))
+        for (_, score, index), names_food in sorted(checked, key=order)
+    ]
 
 
 def _scale(food: Food, grams: float) -> Nutrients:
@@ -315,8 +355,8 @@ def lookup_food_nutrition(
     ranked = _rank(query, foods)
     limit = config.FOOD_MAX_ALTERNATIVES
 
-    if not ranked or ranked[0][1] < config.FOOD_MATCH_MIN_SCORE:
-        suggestions = [f.description for f, _ in ranked[:limit]]
+    if not ranked or not ranked[0].is_match:
+        suggestions = [r.food.description for r in ranked[:limit]]
         message = "No close match in the USDA Foundation Foods table."
         if suggestions:
             message += " Did you mean one of the alternatives? They are the closest names in it."
@@ -329,7 +369,8 @@ def lookup_food_nutrition(
             status="not_found", message=message, grams=args.grams, alternatives=suggestions
         )
 
-    return _found(ranked[0][0], args.grams, [f.description for f, _ in ranked[1 : 1 + limit]])
+    others = [r.food.description for r in ranked[1 : 1 + limit]]
+    return _found(ranked[0].food, args.grams, others)
 
 
 def _found(

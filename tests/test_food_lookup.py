@@ -236,6 +236,57 @@ def test_a_food_not_in_the_table_is_not_found_without_suggestions(query):
     assert "plainer name" in result.message
 
 
+# --- the word check: a match shares a word that names the food (T11.22) ---
+
+KALE = "Kale, frozen, cooked, boiled, drained, without salt"
+EGG = "Eggs, Grade A, Large, egg whole"
+ANCHOVIES = "Anchovies, canned in olive oil, with salt, drained"
+WING = "Chicken, wing, meat and skin, raw"
+
+
+def _table(*names: str) -> tuple[Food, ...]:
+    """Return a made-up table with these names and round values."""
+    return tuple(
+        Food(fdc_id=n, description=name, kcal=100, protein_g=10, carbohydrate_g=10, fat_g=1)
+        for n, name in enumerate(names, start=1)
+    )
+
+
+def test_a_shared_cooking_word_alone_is_no_match_and_the_food_is_suggested_first():
+    """A boiled kale scores enough for "boiled eggs", but only the egg names the food."""
+    result = lookup_food_nutrition("boiled eggs", 100, _table(KALE, EGG))
+    assert result.status == "not_found"
+    assert result.alternatives == [EGG, KALE]
+
+
+@pytest.mark.parametrize("query", ["olive oil", "salt"])
+def test_a_query_word_after_with_or_in_does_not_name_the_food(query):
+    """The anchovies are canned in olive oil; they are not olive oil, nor salt."""
+    result = lookup_food_nutrition(query, 100, _table(ANCHOVIES))
+    assert (result.status, result.alternatives) == ("not_found", [ANCHOVIES])
+
+
+@pytest.mark.parametrize("query", ["meat", "raw", "boiled", "meat and skin"])
+def test_a_query_of_preparation_words_only_matches_nothing(query):
+    """A preparation, state or part word never names the food on its own."""
+    result = lookup_food_nutrition(query, 100, _table(WING, KALE))
+    assert result.status == "not_found"
+    assert result.alternatives  # the names are still offered as suggestions
+
+
+def test_a_food_word_before_the_qualifier_still_matches():
+    """A query word that names the food before "in" or "with" keeps the match."""
+    result = lookup_food_nutrition("anchovies", 100, _table(ANCHOVIES))
+    assert (result.status, result.matched_name) == ("found", ANCHOVIES)
+
+
+def test_the_word_lists_live_in_config():
+    """The check's word lists are config values of their own, apart from FORM_WORDS."""
+    assert {"boiled", "raw", "meat", "skin"} <= config.FOOD_PREPARATION_WORDS
+    assert config.FOOD_QUALIFIER_WORDS == {"with", "in", "without", "and"}
+    assert config.FOOD_MATCH_MIN_SCORE == 80
+
+
 # --- invalid arguments: a clear error, never an exception ---
 
 
@@ -406,6 +457,77 @@ def test_common_foods_are_found_in_the_committed_table(query, head):
     result = lookup_food_nutrition(query, 100)
     assert result.status == "found"
     assert result.matched_name.startswith(head)
+
+
+# Everyday names and the food each matches in the committed table, or None for "not found" (T11.22;
+# T11.20 reruns this list on its larger table). The first four matched a wrong food before T11.22.
+EVERYDAY_FOODS: dict[str, str | None] = {
+    "boiled eggs": None,
+    "salt": None,
+    "olive oil": None,
+    "meat": None,
+    "rolled oats": "Oats, whole grain, rolled, old fashioned",
+    "oats": "Oats, whole grain, steel cut",
+    "chicken breast": "Chicken, breast, meat and skin, raw",
+    "cottage cheese": "Cottage cheese, full fat, large or small curd",
+    "green beans": "Beans, snap, green, raw",
+    "almonds": "Nuts, almonds, whole, raw",
+    "walnuts": "Nuts, walnuts, English, halves, raw",
+    "salmon": "Fish, salmon, sockeye, wild caught, raw",
+    "shrimp": "Crustaceans, shrimp, farm raised, raw",
+    "tuna": "Tuna, ahi or yellowfin, frozen, wild caught",
+    "fried rice": "Restaurant, Chinese, fried rice, without meat",
+    "cheddar": "Cheese, cheddar",
+    "mozzarella": "Cheese, mozzarella, low moisture, part-skim",
+    "bacon": "Pork, cured, bacon, cooked, restaurant",
+    "zucchini": "Squash, summer, green, zucchini, includes skin, raw",
+    "salsa": "Sauce, salsa, ready-to-serve",
+    "bok choy": "Cabbage, bok choy, raw",
+    "cantaloupe": "Melons, cantaloupe, raw",
+    "romaine": "Lettuce, romaine, green, raw",
+    "shiitake": "Mushrooms, shiitake",
+    "chorizo": "Sausage, pork, chorizo, link or ground, cooked, pan-fried",
+    "banana": "Bananas, overripe, raw",
+    "milk": "Milk, whole, 3.25% milkfat, with added vitamin D",
+    "white rice": "Rice, white, long grain, unenriched, raw",
+    "apple": "Apples, fuji, with skin, raw",
+    "broccoli": "Broccoli, raw",
+    "peanut butter": "Peanut butter, creamy",
+    "greek yogurt": "Yogurt, Greek, plain, nonfat",
+    "ground beef": "Beef, ground, 80% lean meat / 20% fat, raw",
+    "pork chop": "Pork, chop, center cut, raw",
+    "orange juice": "Orange juice, no pulp, not fortified, from concentrate, refrigerated",
+    "spinach": "Spinach, baby",
+    "tomato": "Tomato, roma",
+    "potato": "Potatoes, red, without skin, raw",
+    # The table has no plain butter; "butter" names the food in almond butter (owner's choice).
+    "butter": "Almond butter, creamy",
+}
+
+
+@pytest.mark.parametrize(("query", "expected"), EVERYDAY_FOODS.items())
+def test_everyday_names_match_their_food_in_the_committed_table(query, expected):
+    """Each everyday name matches its food, or is "not found" where the table has no such food."""
+    result = lookup_food_nutrition(query, 100)
+    assert (result.status, result.matched_name) == (
+        ("found", expected) if expected else ("not_found", None)
+    )
+
+
+def test_boiled_eggs_suggest_the_egg_foods_in_the_committed_table():
+    """The live check's "boiled eggs" is "not found", with the table's eggs as its suggestions."""
+    result = lookup_food_nutrition("boiled eggs", 100)
+    assert result.status == "not_found"
+    assert result.alternatives
+    assert all(name.startswith("Egg") for name in result.alternatives)
+
+
+def test_every_food_of_the_committed_table_matches_its_own_name_as_free_text():
+    """The word check never stops a food's own name, within the free-text length limit."""
+    for food in load_food_table():
+        if len(food.description) <= config.FOOD_MAX_NAME_CHARS:
+            result = lookup_food_nutrition(food.description, 100)
+            assert (result.status, result.fdc_id) == ("found", food.fdc_id)
 
 
 # --- the dropdown's exact lookup (T4.8) ---
